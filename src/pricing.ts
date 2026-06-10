@@ -17,8 +17,13 @@ export type PricingTable = Record<string, ModelPricing>;
  * unless a more specific row exists.
  */
 export const DEFAULT_PRICING: PricingTable = {
-  "claude-opus-4": { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
-  "claude-fable-5": { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  // Official rates from platform.claude.com/docs/en/about-claude/pricing (2026-06)
+  "claude-opus-4": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
+  // deprecated Opus 4.1 / 4.0 kept the old tier
+  "claude-opus-4-1": { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-opus-4-2": { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
+  "claude-fable-5": { input: 10, output: 50, cacheRead: 1, cacheWrite5m: 12.5, cacheWrite1h: 20 },
+  "claude-mythos-5": { input: 10, output: 50, cacheRead: 1, cacheWrite5m: 12.5, cacheWrite1h: 20 },
   "claude-sonnet-4": { input: 3, output: 15, cacheRead: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
   "claude-haiku-4": { input: 1, output: 5, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2 },
   "glm-": { input: 0.6, output: 2.2, cacheRead: 0.11, cacheWrite5m: 0, cacheWrite1h: 0 },
@@ -29,7 +34,7 @@ export const DEFAULT_PRICING: PricingTable = {
   "*": { input: 3, output: 15, cacheRead: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
 };
 
-const STORAGE_KEY = "csa-pricing-v1";
+const STORAGE_KEY = "csa-pricing-v2";
 
 export function loadPricing(): PricingTable {
   try {

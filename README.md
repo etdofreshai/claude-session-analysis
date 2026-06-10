@@ -24,9 +24,13 @@ usage block across multiple JSONL records).
 
 Claude Code transcripts record token usage but **not** billed cost. The app
 computes estimates from an editable pricing table (Pricing tab, persisted to
-localStorage). Defaults cover Opus/Sonnet/Haiku 4.x, Fable 5 (assumed
-Opus-tier), GLM, and GPT prefixes. Cache-write pricing distinguishes 5m vs 1h
-ephemeral entries.
+localStorage). Claude defaults follow the official pricing docs (June 2026):
+Fable/Mythos 5 at $10/$50 per MTok, Opus 4.5–4.8 at $5/$25, deprecated Opus
+4.0/4.1 at $15/$75, Sonnet at $3/$15, Haiku 4.5 at $1/$5. GLM/GPT/Gemini rows
+are approximations. Cache-write pricing distinguishes 5m vs 1h ephemeral
+entries. Caveat: fast mode (premium Opus pricing) is not detected, and
+subscription plans (Pro/Max) don't bill per token — treat costs as
+API-equivalent value, not an invoice.
 
 ## Run
 
