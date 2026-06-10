@@ -1,4 +1,4 @@
-import type { ModelUsage, SessionStats, StatsResponse } from "./types";
+import type { HourlyUsage, ModelUsage, SessionStats, StatsResponse } from "./types";
 import type { PricingTable } from "./pricing";
 import { dayCT, modelsCost, usageCost } from "./pricing";
 
@@ -7,6 +7,35 @@ export interface FlatSession extends SessionStats {
   cost: number;
   subagentCost: number;
   totalTokensAll: number;
+  /** Estimated cost (session + subagents) in the trailing hour */
+  costLastHour: number;
+}
+
+/**
+ * Cost of hourly buckets intersecting [now - windowMs, now]. Buckets that
+ * partially overlap the window are weighted by overlap fraction (activity
+ * is assumed uniform within an hour — fine for a monitoring estimate).
+ */
+export function windowCost(
+  hourly: HourlyUsage,
+  pricing: PricingTable,
+  windowMs: number,
+  now: number
+): number {
+  const from = now - windowMs;
+  let cost = 0;
+  for (const [hour, models] of Object.entries(hourly)) {
+    const start = Date.parse(hour + ":00:00Z");
+    if (Number.isNaN(start)) continue;
+    const end = start + 3600_000;
+    const overlap = Math.min(end, now) - Math.max(start, from);
+    if (overlap <= 0) continue;
+    const weight = Math.min(1, overlap / 3600_000);
+    for (const [m, u] of Object.entries(models)) {
+      cost += usageCost(m, u, pricing) * weight;
+    }
+  }
+  return cost;
 }
 
 export function shortProject(name: string, displayPath: string | null): string {
@@ -43,6 +72,7 @@ export function allUsage(s: SessionStats): Record<string, ModelUsage> {
 
 export function flatten(stats: StatsResponse, pricing: PricingTable): FlatSession[] {
   const out: FlatSession[] = [];
+  const now = Date.now();
   for (const p of stats.projects) {
     const disp = shortProject(p.name, p.displayPath);
     for (const s of p.sessions) {
@@ -53,7 +83,10 @@ export function flatten(stats: StatsResponse, pricing: PricingTable): FlatSessio
       let totalTokensAll = 0;
       for (const u of Object.values(merged))
         totalTokensAll += u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
-      out.push({ ...s, projectDisplay: disp, cost, subagentCost, totalTokensAll });
+      let costLastHour = windowCost(s.hourlyUsage, pricing, 3600_000, now);
+      for (const sub of s.subagents)
+        costLastHour += windowCost(sub.hourlyUsage, pricing, 3600_000, now);
+      out.push({ ...s, projectDisplay: disp, cost, subagentCost, totalTokensAll, costLastHour });
     }
   }
   return out;

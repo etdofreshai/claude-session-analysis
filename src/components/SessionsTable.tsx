@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { FlatSession } from "../aggregate";
 import { fmtDateTimeCT, fmtDuration, fmtTokens, fmtUsd } from "../pricing";
 
-type SortKey = "date" | "cost" | "tokens" | "prompts" | "duration" | "subagents";
+type SortKey = "date" | "cost" | "cost1h" | "tokens" | "prompts" | "duration" | "subagents";
 
 export default function SessionsTable({
   sessions, onSelect,
@@ -37,6 +37,7 @@ export default function SessionsTable({
       switch (sortKey) {
         case "date": return Date.parse(s.lastTs ?? s.firstTs ?? "") || 0;
         case "cost": return s.cost + s.subagentCost;
+        case "cost1h": return s.costLastHour;
         case "tokens": return s.totalTokensAll;
         case "prompts": return s.counts.userPrompts;
         case "duration": return s.durationMs;
@@ -85,7 +86,8 @@ export default function SessionsTable({
             {th("Tokens", "tokens")}
             {th("Subagents", "subagents")}
             {th("Duration", "duration")}
-            {th("Est. cost", "cost")}
+            {th("Cost (1h)", "cost1h")}
+            {th("Total cost", "cost")}
           </tr>
         </thead>
         <tbody>
@@ -105,6 +107,7 @@ export default function SessionsTable({
               <td className="num">{fmtTokens(s.totalTokensAll)}</td>
               <td className="num">{s.subagents.length || ""}</td>
               <td className="num">{fmtDuration(s.durationMs)}</td>
+              <td className="num cost">{s.costLastHour > 0.0005 ? fmtUsd(s.costLastHour) : ""}</td>
               <td className="num cost">
                 {fmtUsd(s.cost + s.subagentCost)}
                 {s.subagentCost > 0.005 && (

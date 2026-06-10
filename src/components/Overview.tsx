@@ -20,9 +20,10 @@ export default function Overview({
   const tools = useMemo(() => topTools(sessions), [sessions]);
 
   const totals = useMemo(() => {
-    let cost = 0, allTok = 0, prompts = 0, asst = 0, subagents = 0, errors = 0, toolUses = 0;
+    let cost = 0, costLastHour = 0, allTok = 0, prompts = 0, asst = 0, subagents = 0, errors = 0, toolUses = 0;
     for (const s of sessions) {
       cost += s.cost + s.subagentCost;
+      costLastHour += s.costLastHour;
       allTok += s.totalTokensAll;
       prompts += s.counts.userPrompts;
       asst += s.counts.assistantMsgs;
@@ -30,7 +31,7 @@ export default function Overview({
       errors += s.counts.apiErrors;
       toolUses += s.counts.toolUses;
     }
-    return { cost, allTok, prompts, asst, subagents, errors, toolUses };
+    return { cost, costLastHour, allTok, prompts, asst, subagents, errors, toolUses };
   }, [sessions]);
 
   const modelNames = useMemo(() => {
@@ -52,6 +53,7 @@ export default function Overview({
     <div className="page">
       <div className="cards">
         <Card label="Est. total cost" value={fmtUsd(totals.cost)} />
+        <Card label="Est. cost (last 1h)" value={fmtUsd(totals.costLastHour)} />
         <Card label="Total tokens (incl. cache)" value={fmtTokens(totals.allTok)} />
         <Card label="User prompts" value={totals.prompts.toLocaleString()} />
         <Card label="Assistant messages" value={totals.asst.toLocaleString()} />

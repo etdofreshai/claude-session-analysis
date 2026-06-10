@@ -11,6 +11,14 @@ export interface ModelUsage {
   webSearch: number;
 }
 
+/**
+ * Token usage bucketed by UTC hour ("2026-06-10T16") and model.
+ * Only the trailing 48h of a transcript is kept — enough for rolling
+ * "recent cost" windows without bloating the payload. Untouched files
+ * can't have recent activity, so mtime caching stays correct.
+ */
+export type HourlyUsage = Record<string, Record<string, ModelUsage>>;
+
 export interface SubagentStats {
   id: string;
   file: string;
@@ -22,6 +30,7 @@ export interface SubagentStats {
   models: Record<string, ModelUsage>;
   toolCalls: Record<string, number>;
   agentName: string | null;
+  hourlyUsage: HourlyUsage;
 }
 
 export interface SessionCounts {
@@ -58,6 +67,7 @@ export interface SessionStats {
   toolCalls: Record<string, number>;
   subagents: SubagentStats[];
   recordTypes: Record<string, number>;
+  hourlyUsage: HourlyUsage;
 }
 
 export interface ProjectStats {

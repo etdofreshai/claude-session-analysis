@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type {
+  HourlyUsage,
   ModelUsage,
   ProjectStats,
   SessionDetail,
@@ -55,6 +56,7 @@ interface ParsedTranscript {
   models: Record<string, ModelUsage>;
   toolCalls: Record<string, number>;
   recordTypes: Record<string, number>;
+  hourlyUsage: HourlyUsage;
 }
 
 function parseTranscript(filePath: string): ParsedTranscript {
@@ -81,6 +83,7 @@ function parseTranscript(filePath: string): ParsedTranscript {
     models: {},
     toolCalls: {},
     recordTypes: {},
+    hourlyUsage: {},
   };
 
   let text: string;
@@ -169,25 +172,40 @@ function parseTranscript(filePath: string): ParsedTranscript {
         const u = m.usage;
         if (u && m.id && !seenMsgIds.has(m.id)) {
           seenMsgIds.add(m.id);
-          const mu = (out.models[model] ??= emptyUsage());
-          mu.calls++;
-          mu.input += u.input_tokens || 0;
-          mu.output += u.output_tokens || 0;
-          mu.cacheRead += u.cache_read_input_tokens || 0;
-          const cc = u.cache_creation;
-          if (cc && (cc.ephemeral_5m_input_tokens || cc.ephemeral_1h_input_tokens)) {
-            mu.cacheWrite5m += cc.ephemeral_5m_input_tokens || 0;
-            mu.cacheWrite1h += cc.ephemeral_1h_input_tokens || 0;
-          } else {
-            mu.cacheWrite5m += u.cache_creation_input_tokens || 0;
+          const targets = [(out.models[model] ??= emptyUsage())];
+          if (o.timestamp) {
+            const hour = String(o.timestamp).slice(0, 13); // "2026-06-10T16"
+            const hb = (out.hourlyUsage[hour] ??= {});
+            targets.push((hb[model] ??= emptyUsage()));
           }
-          mu.webSearch += u.server_tool_use?.web_search_requests || 0;
+          for (const mu of targets) {
+            mu.calls++;
+            mu.input += u.input_tokens || 0;
+            mu.output += u.output_tokens || 0;
+            mu.cacheRead += u.cache_read_input_tokens || 0;
+            const cc = u.cache_creation;
+            if (cc && (cc.ephemeral_5m_input_tokens || cc.ephemeral_1h_input_tokens)) {
+              mu.cacheWrite5m += cc.ephemeral_5m_input_tokens || 0;
+              mu.cacheWrite1h += cc.ephemeral_1h_input_tokens || 0;
+            } else {
+              mu.cacheWrite5m += u.cache_creation_input_tokens || 0;
+            }
+            mu.webSearch += u.server_tool_use?.web_search_requests || 0;
+          }
         }
         break;
       }
     }
   }
   out.title = customTitle ?? aiTitle;
+  // Keep only the trailing 48h of hourly buckets (relative to the
+  // transcript's own last activity, so the result is deterministic).
+  if (out.lastTs) {
+    const cutoff = Date.parse(out.lastTs) - 48 * 3600_000;
+    for (const hour of Object.keys(out.hourlyUsage)) {
+      if (Date.parse(hour + ":00:00Z") < cutoff) delete out.hourlyUsage[hour];
+    }
+  }
   return out;
 }
 
@@ -238,6 +256,7 @@ function scanSubagents(projDir: string, sessionId: string): SubagentStats[] {
         models: p.models,
         toolCalls: p.toolCalls,
         agentName: p.agentName,
+        hourlyUsage: p.hourlyUsage,
       };
     });
   });
@@ -293,6 +312,7 @@ function scanSession(
       models: p.models,
       toolCalls: p.toolCalls,
       recordTypes: p.recordTypes,
+      hourlyUsage: p.hourlyUsage,
     };
     return stats;
   });
