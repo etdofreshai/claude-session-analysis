@@ -1,0 +1,95 @@
+// Shared between the Vite middleware (server/) and the React app (src/).
+
+export interface ModelUsage {
+  /** API calls attributed to this model (deduped by message id) */
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+  webSearch: number;
+}
+
+export interface SubagentStats {
+  id: string;
+  file: string;
+  sizeBytes: number;
+  firstTs: string | null;
+  lastTs: string | null;
+  assistantMsgs: number;
+  userMsgs: number;
+  models: Record<string, ModelUsage>;
+  toolCalls: Record<string, number>;
+  agentName: string | null;
+}
+
+export interface SessionCounts {
+  records: number;
+  userPrompts: number;
+  toolResults: number;
+  assistantMsgs: number;
+  toolUses: number;
+  attachments: number;
+  system: number;
+  apiErrors: number;
+  sidechain: number;
+}
+
+export interface SessionStats {
+  id: string;
+  project: string;
+  file: string;
+  sizeBytes: number;
+  title: string | null;
+  lastPrompt: string | null;
+  agentName: string | null;
+  firstTs: string | null;
+  lastTs: string | null;
+  /** Wall-clock span in ms between first and last record */
+  durationMs: number;
+  version: string | null;
+  gitBranch: string | null;
+  cwd: string | null;
+  entrypoint: string | null;
+  permissionModes: string[];
+  counts: SessionCounts;
+  models: Record<string, ModelUsage>;
+  toolCalls: Record<string, number>;
+  subagents: SubagentStats[];
+  recordTypes: Record<string, number>;
+}
+
+export interface ProjectStats {
+  /** Raw directory name, e.g. C--Users-etgarcia-workspace */
+  name: string;
+  /** Best-effort real path derived from cwd fields in transcripts */
+  displayPath: string | null;
+  sessions: SessionStats[];
+}
+
+export interface StatsResponse {
+  generatedAt: string;
+  scanMs: number;
+  root: string;
+  projects: ProjectStats[];
+}
+
+// ---- Session detail (drill-down) ----
+
+export interface TimelineEvent {
+  ts: string | null;
+  kind: "user" | "assistant" | "tool_use" | "tool_result" | "error" | "system";
+  model?: string;
+  text?: string;
+  tool?: string;
+  outputTokens?: number;
+  inputTokens?: number;
+  cacheRead?: number;
+  agent?: string; // set for subagent events
+}
+
+export interface SessionDetail {
+  session: SessionStats;
+  timeline: TimelineEvent[];
+}
