@@ -94,6 +94,11 @@ function parseTranscript(filePath: string): ParsedTranscript {
   // each repeating the usage block — count usage once per message id.
   const seenMsgIds = new Set<string>();
 
+  // Track both title kinds separately so the latest of each wins;
+  // a custom title always beats an AI-generated one.
+  let customTitle: string | null = null;
+  let aiTitle: string | null = null;
+
   for (const line of text.split("\n")) {
     if (!line) continue;
     let o: any;
@@ -119,12 +124,10 @@ function parseTranscript(filePath: string): ParsedTranscript {
 
     switch (t) {
       case "custom-title":
-        if (o.customTitle) out.title = o.customTitle;
+        if (o.customTitle) customTitle = o.customTitle;
         break;
       case "ai-title":
-        // custom titles win over AI-generated ones
-        if (!out.title && (o.title ?? o.aiTitle))
-          out.title = o.title ?? o.aiTitle;
+        if (o.aiTitle ?? o.title) aiTitle = o.aiTitle ?? o.title;
         break;
       case "last-prompt":
         if (o.lastPrompt) out.lastPrompt = o.lastPrompt;
@@ -184,6 +187,7 @@ function parseTranscript(filePath: string): ParsedTranscript {
       }
     }
   }
+  out.title = customTitle ?? aiTitle;
   return out;
 }
 

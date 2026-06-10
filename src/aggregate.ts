@@ -1,6 +1,6 @@
 import type { ModelUsage, SessionStats, StatsResponse } from "./types";
 import type { PricingTable } from "./pricing";
-import { modelsCost, usageCost } from "./pricing";
+import { dayCT, modelsCost, usageCost } from "./pricing";
 
 export interface FlatSession extends SessionStats {
   projectDisplay: string;
@@ -72,7 +72,7 @@ export function byDay(sessions: FlatSession[], pricing: PricingTable): DayAgg[] 
   for (const s of sessions) {
     const ts = s.lastTs ?? s.firstTs;
     if (!ts) continue;
-    const day = ts.slice(0, 10);
+    const day = dayCT(ts);
     let agg = map.get(day);
     if (!agg) {
       agg = { day, cost: 0, output: 0, sessions: 0, byModel: {} };

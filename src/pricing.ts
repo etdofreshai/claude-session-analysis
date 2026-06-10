@@ -102,6 +102,39 @@ export function fmtTokens(n: number): string {
   return String(n);
 }
 
+export const DISPLAY_TZ = "America/Chicago";
+
+const dateTimeFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DISPLAY_TZ,
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hour12: false,
+});
+const timeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: DISPLAY_TZ,
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+});
+const dayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DISPLAY_TZ,
+  year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+/** "2026-06-10 11:31" in Central Time */
+export function fmtDateTimeCT(ts: string | null): string {
+  if (!ts) return "";
+  return dateTimeFmt.format(new Date(ts)).replace(",", "");
+}
+
+/** "11:31:05" in Central Time */
+export function fmtTimeCT(ts: string | null): string {
+  if (!ts) return "";
+  return timeFmt.format(new Date(ts));
+}
+
+/** "2026-06-10" in Central Time (for daily bucketing) */
+export function dayCT(ts: string): string {
+  return dayFmt.format(new Date(ts));
+}
+
 export function fmtDuration(ms: number): string {
   if (ms <= 0) return "—";
   const s = Math.round(ms / 1000);

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { SessionDetail } from "../types";
 import { fetchSessionDetail } from "../api";
 import type { PricingTable } from "../pricing";
-import { fmtDuration, fmtTokens, fmtUsd, modelsCost, totalTokens, usageCost } from "../pricing";
+import { fmtDuration, fmtTimeCT, fmtTokens, fmtUsd, modelsCost, totalTokens, usageCost } from "../pricing";
 
 export default function SessionDetailView({
   project, id, pricing, onClose,
@@ -113,7 +113,7 @@ export default function SessionDetailView({
                 .filter((e) => showTools || e.kind !== "tool_use")
                 .map((e, i) => (
                   <div key={i} className={"event " + e.kind}>
-                    <span className="ts">{e.ts?.slice(11, 19) ?? ""}</span>
+                    <span className="ts">{fmtTimeCT(e.ts)}</span>
                     <span className="kind">
                       {e.agent ? `[${e.agent}] ` : ""}
                       {e.kind === "tool_use" ? `→ ${e.tool}` : e.kind}

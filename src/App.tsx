@@ -17,7 +17,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("overview");
   const [pricing, setPricing] = useState<PricingTable>(() => loadPricing());
   const [selected, setSelected] = useState<{ project: string; id: string } | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const refresh = async () => {
     setLoading(true);

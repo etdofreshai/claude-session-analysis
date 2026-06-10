@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { FlatSession } from "../aggregate";
-import { fmtDuration, fmtTokens, fmtUsd } from "../pricing";
+import { fmtDateTimeCT, fmtDuration, fmtTokens, fmtUsd } from "../pricing";
 
 type SortKey = "date" | "cost" | "tokens" | "prompts" | "duration" | "subagents";
 
@@ -91,7 +91,7 @@ export default function SessionsTable({
         <tbody>
           {rows.map((s) => (
             <tr key={s.project + s.id} onClick={() => onSelect(s)}>
-              <td className="nowrap">{(s.lastTs ?? s.firstTs ?? "").slice(0, 16).replace("T", " ")}</td>
+              <td className="nowrap">{fmtDateTimeCT(s.lastTs ?? s.firstTs)}</td>
               <td className="nowrap">{s.projectDisplay}</td>
               <td className="title-cell" title={s.lastPrompt ?? ""}>
                 {s.title ?? s.lastPrompt ?? s.agentName ?? s.id.slice(0, 8)}
