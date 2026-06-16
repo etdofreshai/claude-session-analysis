@@ -23,6 +23,7 @@ export function sessionApiPlugin(): Plugin {
           if (url.pathname === "/api/session") {
             const project = url.searchParams.get("project");
             const id = url.searchParams.get("id");
+            const source = url.searchParams.get("source") ?? undefined;
             if (!project || !id) {
               sendJson(res, 400, { error: "project and id required" });
               return;
@@ -32,7 +33,7 @@ export function sessionApiPlugin(): Plugin {
               sendJson(res, 400, { error: "invalid characters" });
               return;
             }
-            const detail = sessionDetail(project, id);
+            const detail = sessionDetail(project, id, source);
             if (!detail) {
               sendJson(res, 404, { error: "session not found" });
               return;

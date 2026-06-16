@@ -10,13 +10,20 @@ import PricingSettings from "./components/PricingSettings";
 
 type Tab = "overview" | "sessions" | "pricing";
 
+const TABS: Tab[] = ["overview", "sessions", "pricing"];
+
+function tabFromHash(): Tab {
+  const h = window.location.hash.replace(/^#\/?/, "") as Tab;
+  return TABS.includes(h) ? h : "overview";
+}
+
 export default function App() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const [pricing, setPricing] = useState<PricingTable>(() => loadPricing());
-  const [selected, setSelected] = useState<{ project: string; id: string } | null>(null);
+  const [selected, setSelected] = useState<{ project: string; id: string; source: string } | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const refresh = async () => {
@@ -33,6 +40,17 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // Keep the tab in sync with the URL hash (so refresh / back-forward work).
+  useEffect(() => {
+    if (tabFromHash() !== tab) window.location.hash = `#/${tab}`;
+  }, [tab]);
+
+  useEffect(() => {
+    const onHashChange = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   useEffect(() => {
@@ -84,7 +102,8 @@ export default function App() {
       {stats && tab === "sessions" && (
         <SessionsTable
           sessions={sessions}
-          onSelect={(s) => setSelected({ project: s.project, id: s.id })}
+          pricing={pricing}
+          onSelect={(s) => setSelected({ project: s.project, id: s.id, source: s.source })}
         />
       )}
       {tab === "pricing" && (
@@ -95,6 +114,7 @@ export default function App() {
         <SessionDetailView
           project={selected.project}
           id={selected.id}
+          source={selected.source}
           pricing={pricing}
           onClose={() => setSelected(null)}
         />

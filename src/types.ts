@@ -45,10 +45,13 @@ export interface SessionCounts {
   sidechain: number;
 }
 
+export type SessionSource = "claude" | "codex";
+
 export interface SessionStats {
   id: string;
   project: string;
   file: string;
+  source: SessionSource;
   sizeBytes: number;
   title: string | null;
   lastPrompt: string | null;
@@ -62,6 +65,7 @@ export interface SessionStats {
   cwd: string | null;
   entrypoint: string | null;
   permissionModes: string[];
+  effortModes: string[];
   counts: SessionCounts;
   models: Record<string, ModelUsage>;
   toolCalls: Record<string, number>;

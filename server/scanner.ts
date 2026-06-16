@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { scanCodexAll, codexSessionDetail } from "./codex-scanner";
 import type {
   HourlyUsage,
   ModelUsage,
@@ -44,6 +45,7 @@ interface ParsedTranscript {
   cwd: string | null;
   entrypoint: string | null;
   permissionModes: string[];
+  effortModes: string[];
   records: number;
   userPrompts: number;
   toolResults: number;
@@ -71,6 +73,7 @@ function parseTranscript(filePath: string): ParsedTranscript {
     cwd: null,
     entrypoint: null,
     permissionModes: [],
+    effortModes: [],
     records: 0,
     userPrompts: 0,
     toolResults: 0,
@@ -141,6 +144,10 @@ function parseTranscript(filePath: string): ParsedTranscript {
       case "permission-mode":
         if (o.permissionMode && !out.permissionModes.includes(o.permissionMode))
           out.permissionModes.push(o.permissionMode);
+        break;
+      case "mode":
+        if (o.mode && !out.effortModes.includes(o.mode))
+          out.effortModes.push(o.mode);
         break;
       case "attachment":
         out.attachments++;
@@ -283,6 +290,7 @@ function scanSession(
       id,
       project: projName,
       file: fp,
+      source: "claude",
       sizeBytes: safeSize(fp),
       title: p.title,
       lastPrompt: p.lastPrompt,
@@ -298,6 +306,7 @@ function scanSession(
       cwd: p.cwd,
       entrypoint: p.entrypoint,
       permissionModes: p.permissionModes,
+      effortModes: p.effortModes,
       counts: {
         records: p.records,
         userPrompts: p.userPrompts,
@@ -351,6 +360,12 @@ export function scanAll(): StatsResponse {
       ? mostCommon(cwds)
       : null;
     projects.push({ name, displayPath, sessions });
+  }
+  // Codex rollout transcripts (~/.codex/sessions) sit alongside Claude projects.
+  try {
+    projects.push(...scanCodexAll());
+  } catch {
+    // codex dir missing or unreadable — skip
   }
   return {
     generatedAt: new Date().toISOString(),
@@ -449,8 +464,10 @@ function timelineFromFile(filePath: string, agent?: string): TimelineEvent[] {
 
 export function sessionDetail(
   projName: string,
-  sessionId: string
+  sessionId: string,
+  source?: string
 ): SessionDetail | null {
+  if (source === "codex") return codexSessionDetail(sessionId);
   const root = projectsRoot();
   const projDir = path.join(root, projName);
   const fp = path.join(projDir, sessionId + ".jsonl");

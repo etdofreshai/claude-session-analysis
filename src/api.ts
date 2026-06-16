@@ -8,11 +8,12 @@ export async function fetchStats(): Promise<StatsResponse> {
 
 export async function fetchSessionDetail(
   project: string,
-  id: string
+  id: string,
+  source?: string
 ): Promise<SessionDetail> {
-  const res = await fetch(
-    `/api/session?project=${encodeURIComponent(project)}&id=${encodeURIComponent(id)}`
-  );
+  const params = new URLSearchParams({ project, id });
+  if (source) params.set("source", source);
+  const res = await fetch(`/api/session?${params.toString()}`);
   if (!res.ok) throw new Error(`GET /api/session → ${res.status}`);
   return res.json();
 }
