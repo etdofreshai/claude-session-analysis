@@ -41,18 +41,12 @@ interface RemoteDef {
   rsyncPath?: string;
 }
 
-// Built-in remotes. etzmacminim2 is macOS (plain rsync, home-relative paths);
-// etzevox2 is Windows with no native rsync, so we drive Ubuntu's WSL rsync and
-// reference the Windows profile via /mnt/c.
+// Built-in remotes — macOS hosts pulled over plain rsync with home-relative
+// paths. The machine running this dashboard is etzmacminim2 itself, so it's
+// scanned directly as the local host (below) rather than pulled over SSH.
 const BUILTIN_REMOTES: RemoteDef[] = [
-  { id: "etzmacminim2", ssh: "etgarcia@etzmacminim2.lan" },
-  {
-    id: "etzevox2",
-    ssh: "etgarcia@etzevox2.lan",
-    rsyncPath: "wsl -d Ubuntu rsync",
-    remoteProjects: "/mnt/c/Users/etgarcia/.claude/projects/",
-    remoteCodex: "/mnt/c/Users/etgarcia/.codex/sessions/",
-  },
+  { id: "etzmacstudiom4max", ssh: "etgarcia@etzmacstudiom4max.lan" },
+  { id: "etzmacbookprom1", ssh: "etgarcia@etzmacbookprom1.lan" },
 ];
 
 // Optional env override: comma-separated "id=user@host" pairs (unix defaults).
@@ -79,7 +73,7 @@ export function hosts(): HostSpec[] {
 
   list.push({
     id: "local",
-    label: process.env.CLAUDE_LOCAL_LABEL ?? "local",
+    label: process.env.CLAUDE_LOCAL_LABEL ?? "etzmacminim2",
     ssh: null,
     projectsDir:
       process.env.CLAUDE_PROJECTS_DIR ??

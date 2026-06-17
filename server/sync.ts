@@ -94,18 +94,31 @@ export function ensureSynced(): HostSyncStatus[] {
 }
 
 export function statusList(): HostSyncStatus[] {
-  return hosts()
-    .filter((h) => h.ssh)
-    .map(
-      (h) =>
-        status.get(h.id) ?? {
-          id: h.id,
-          label: h.label,
-          ssh: h.ssh,
-          ok: false,
-          error: "not yet synced",
-          lastSyncMs: null,
-          durationMs: null,
-        }
+  return hosts().map((h) => {
+    // The local machine isn't pulled over SSH — it's scanned in place, so it
+    // always counts as "ok" and has no rsync status to report. It's still
+    // listed here so it shows up in the dashboard's host status bar.
+    if (!h.ssh) {
+      return {
+        id: h.id,
+        label: h.label,
+        ssh: null,
+        ok: true,
+        error: null,
+        lastSyncMs: null,
+        durationMs: null,
+      };
+    }
+    return (
+      status.get(h.id) ?? {
+        id: h.id,
+        label: h.label,
+        ssh: h.ssh,
+        ok: false,
+        error: "not yet synced",
+        lastSyncMs: null,
+        durationMs: null,
+      }
     );
+  });
 }
