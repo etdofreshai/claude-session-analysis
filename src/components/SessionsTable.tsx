@@ -147,6 +147,7 @@ export default function SessionsTable({
         </label>
         <span className="muted">{rows.length} sessions</span>
       </div>
+      <div className="table-scroll">
       <table className="sessions">
         <thead>
           <tr>
@@ -174,7 +175,7 @@ export default function SessionsTable({
               <td className="nowrap">
                 <span className="chip chip-host">{s.host}</span>
               </td>
-              <td className="nowrap">{s.projectDisplay}</td>
+              <td className="project-cell" title={s.projectDisplay}>{s.projectDisplay}</td>
               <td className="title-cell" title={s.lastPrompt ?? ""}>
                 {s.title ?? s.lastPrompt ?? s.agentName ?? s.id.slice(0, 8)}
               </td>
@@ -206,6 +207,7 @@ export default function SessionsTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

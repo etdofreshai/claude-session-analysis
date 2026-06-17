@@ -88,8 +88,18 @@ table.sessions th { color: var(--muted); font-weight: 500; font-size: 11px; text
 table.sessions th.sortable { cursor: pointer; user-select: none; }
 table.sessions tbody tr { cursor: pointer; }
 table.sessions tbody tr:hover { background: #20242c; }
-.title-cell { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Project paths can be 100+ chars (worktree paths). Cap the width and clip from
+   the LEFT (direction: rtl) so the distinctive tail — repo / worktree name —
+   stays visible instead of an identical "C:\Users\…" prefix. Full path on hover. */
+.project-cell {
+  max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  direction: rtl; text-align: left;
+}
 .nowrap { white-space: nowrap; }
+/* Keep a wide table inside the page: scroll horizontally as a last resort on
+   narrow windows rather than overflowing the body. */
+.table-scroll { overflow-x: auto; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .cost { color: var(--accent); }
 .muted { color: var(--muted); font-size: 12px; }
