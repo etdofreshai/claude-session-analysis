@@ -42,6 +42,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .autorefresh { font-size: 12px; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; margin-left: 8px; }
 
+.sync-status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; width: 100%; }
+.sync-host { color: var(--muted); cursor: default; }
+.sync-host.ok { color: #5ee8b0; }
+.sync-host.err { color: #e8716a; }
+
 input, select {
   background: var(--panel); color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 6px 10px; font-size: 13px;
@@ -89,6 +94,25 @@ table.sessions tbody tr:hover { background: #20242c; }
 .cost { color: var(--accent); }
 .muted { color: var(--muted); font-size: 12px; }
 
+.legend-swatch {
+  display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  margin-right: 6px; vertical-align: middle; flex: none;
+}
+
+.chart-tooltip {
+  background: #1c1f26; border: 1px solid #333; border-radius: 6px;
+  padding: 8px 10px; font-size: 12px; max-width: 280px;
+}
+.chart-tooltip .tt-head { color: var(--muted); margin-bottom: 6px; }
+.chart-tooltip .tt-row {
+  display: flex; justify-content: space-between; gap: 16px; line-height: 1.5;
+}
+.chart-tooltip .tt-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-tooltip .tt-val { font-variant-numeric: tabular-nums; }
+.chart-tooltip .tt-total {
+  border-top: 1px solid #333; margin-top: 4px; padding-top: 4px; color: var(--text);
+}
+
 .chip {
   display: inline-block; background: #262b35; border-radius: 10px;
   padding: 1px 8px; font-size: 11px; margin-right: 4px;
@@ -97,6 +121,7 @@ table.sessions tbody tr:hover { background: #20242c; }
 .chip-src { text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.04em; }
 .chip-claude { background: #2a221c; color: #e8a16a; }
 .chip-codex { background: #1c2a25; color: #5ee8b0; }
+.chip-host { background: #1f2433; color: #82cfff; }
 
 .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .filters input { min-width: 280px; }

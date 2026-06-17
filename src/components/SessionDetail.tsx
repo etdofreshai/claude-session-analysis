@@ -88,11 +88,12 @@ function MessageModal({ event, onClose }: { event: TimelineEvent; onClose: () =>
 // ---------- main session detail ----------
 
 export default function SessionDetailView({
-  project, id, source, pricing, onClose,
+  project, id, source, host, pricing, onClose,
 }: {
   project: string;
   id: string;
   source?: string;
+  host?: string;
   pricing: PricingTable;
   onClose: () => void;
 }) {
@@ -103,8 +104,8 @@ export default function SessionDetailView({
 
   useEffect(() => {
     setDetail(null);
-    fetchSessionDetail(project, id, source).then(setDetail).catch((e) => setError(String(e)));
-  }, [project, id, source]);
+    fetchSessionDetail(project, id, source, host).then(setDetail).catch((e) => setError(String(e)));
+  }, [project, id, source, host]);
 
   // Lock body scroll while this modal is open
   useEffect(() => {
@@ -120,6 +121,7 @@ export default function SessionDetailView({
           <div className="modal-header">
             <h2>
               {detail?.session.title ?? id.slice(0, 8)}
+              {host && <span className="chip chip-host">{host}</span>}
               <span className="sub">{project}</span>
             </h2>
             <button onClick={onClose}>✕</button>

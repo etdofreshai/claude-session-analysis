@@ -276,12 +276,13 @@ function projectNameFromCwd(cwd: string | null, id: string): string {
   return parts[parts.length - 1] || cwd;
 }
 
-function scanCodexSession(file: string): SessionStats {
+function scanCodexSession(file: string, host: string): SessionStats {
   return cached(file, () => {
     const p = parseCodexTranscript(file);
     const id = idFromFile(file);
     const stats: SessionStats = {
       id,
+      host,
       project: projectNameFromCwd(p.cwd, id),
       file,
       source: "codex",
@@ -324,12 +325,11 @@ function scanCodexSession(file: string): SessionStats {
 
 // Group codex sessions into ProjectStats by their cwd (so they sit alongside
 // Claude projects in the same UI).
-export function scanCodexAll(): ProjectStats[] {
-  const root = codexRoot();
+export function scanCodexAll(root = codexRoot(), host = "local"): ProjectStats[] {
   const files = listRolloutFiles(root);
   const byProject = new Map<string, SessionStats[]>();
   for (const f of files) {
-    const s = scanCodexSession(f);
+    const s = scanCodexSession(f, host);
     const arr = byProject.get(s.project) ?? [];
     arr.push(s);
     byProject.set(s.project, arr);
@@ -339,6 +339,7 @@ export function scanCodexAll(): ProjectStats[] {
     const cwds = sessions.map((s) => s.cwd).filter(Boolean) as string[];
     projects.push({
       name: `codex:${name}`,
+      host,
       displayPath: cwds[0] ?? null,
       sessions,
     });
@@ -406,12 +407,15 @@ function codexTimeline(filePath: string): TimelineEvent[] {
   return events;
 }
 
-export function codexSessionDetail(sessionId: string): SessionDetail | null {
-  const root = codexRoot();
+export function codexSessionDetail(
+  sessionId: string,
+  root = codexRoot(),
+  host = "local"
+): SessionDetail | null {
   const files = listRolloutFiles(root);
   const file = files.find((f) => idFromFile(f) === sessionId);
   if (!file) return null;
-  const session = scanCodexSession(file);
+  const session = scanCodexSession(file, host);
   const timeline = codexTimeline(file);
   timeline.sort((a, b) => (a.ts ?? "").localeCompare(b.ts ?? ""));
   return { session, timeline };

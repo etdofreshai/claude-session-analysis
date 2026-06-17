@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { scanCodexAll, codexSessionDetail } from "./codex-scanner";
+import { hosts, hostById, type HostSpec } from "./hosts";
+import { ensureSynced } from "./sync";
 import type {
   HourlyUsage,
   ModelUsage,
@@ -240,7 +242,7 @@ function cached<T>(filePath: string, compute: () => T): T {
   return value;
 }
 
-function scanSubagents(projDir: string, sessionId: string): SubagentStats[] {
+function scanSubagents(projDir: string, sessionId: string, host: string): SubagentStats[] {
   const dir = path.join(projDir, sessionId, "subagents");
   let files: string[];
   try {
@@ -254,6 +256,7 @@ function scanSubagents(projDir: string, sessionId: string): SubagentStats[] {
       const p = parseTranscript(fp);
       return {
         id: f.replace(/^agent-/, "").replace(/\.jsonl$/, ""),
+        host,
         file: fp,
         sizeBytes: safeSize(fp),
         firstTs: p.firstTs,
@@ -280,7 +283,8 @@ function safeSize(fp: string): number {
 function scanSession(
   projName: string,
   projDir: string,
-  file: string
+  file: string,
+  host: string
 ): SessionStats {
   const fp = path.join(projDir, file);
   const id = file.replace(/\.jsonl$/, "");
@@ -288,6 +292,7 @@ function scanSession(
     const p = parseTranscript(fp);
     const stats: Omit<SessionStats, "subagents"> = {
       id,
+      host,
       project: projName,
       file: fp,
       source: "claude",
@@ -327,12 +332,12 @@ function scanSession(
   });
   // Subagent files have their own mtime-based cache entries, so re-resolve
   // them on every scan rather than freezing them inside the session entry.
-  return { ...base, subagents: scanSubagents(projDir, id) };
+  return { ...base, subagents: scanSubagents(projDir, id, host) };
 }
 
-export function scanAll(): StatsResponse {
-  const t0 = Date.now();
-  const root = projectsRoot();
+// Scan one host's Claude projects dir (already staged locally for remotes).
+function scanClaudeHost(host: HostSpec): ProjectStats[] {
+  const root = host.projectsDir;
   const projects: ProjectStats[] = [];
   let projDirs: string[] = [];
   try {
@@ -341,7 +346,8 @@ export function scanAll(): StatsResponse {
       .filter((e) => e.isDirectory())
       .map((e) => e.name);
   } catch {
-    // root missing — return empty response
+    // root missing (host never synced / no transcripts) — nothing to scan
+    return projects;
   }
   for (const name of projDirs) {
     const projDir = path.join(root, name);
@@ -354,23 +360,36 @@ export function scanAll(): StatsResponse {
       continue;
     }
     if (files.length === 0) continue;
-    const sessions = files.map((f) => scanSession(name, projDir, f));
+    const sessions = files.map((f) => scanSession(name, projDir, f, host.label));
     const cwds = sessions.map((s) => s.cwd).filter(Boolean) as string[];
-    const displayPath = cwds.length
-      ? mostCommon(cwds)
-      : null;
-    projects.push({ name, displayPath, sessions });
+    const displayPath = cwds.length ? mostCommon(cwds) : null;
+    projects.push({ name, host: host.label, displayPath, sessions });
   }
-  // Codex rollout transcripts (~/.codex/sessions) sit alongside Claude projects.
-  try {
-    projects.push(...scanCodexAll());
-  } catch {
-    // codex dir missing or unreadable — skip
+  return projects;
+}
+
+export function scanAll(): StatsResponse {
+  const t0 = Date.now();
+  // Kick off a background refresh of remote staging dirs if stale; this scan
+  // reads whatever is currently staged and never blocks on the pull.
+  const sync = ensureSynced();
+  const allHosts = hosts();
+  const projects: ProjectStats[] = [];
+  for (const host of allHosts) {
+    projects.push(...scanClaudeHost(host));
+    // Codex rollout transcripts sit alongside Claude projects per host.
+    try {
+      projects.push(...scanCodexAll(host.codexDir, host.label));
+    } catch {
+      // codex dir missing or unreadable — skip
+    }
   }
   return {
     generatedAt: new Date().toISOString(),
     scanMs: Date.now() - t0,
-    root,
+    root: allHosts[0]?.projectsDir ?? projectsRoot(),
+    hosts: allHosts.map((h) => ({ id: h.id, label: h.label, remote: !!h.ssh })),
+    sync,
     projects,
   };
 }
@@ -465,14 +484,16 @@ function timelineFromFile(filePath: string, agent?: string): TimelineEvent[] {
 export function sessionDetail(
   projName: string,
   sessionId: string,
-  source?: string
+  source?: string,
+  hostId?: string
 ): SessionDetail | null {
-  if (source === "codex") return codexSessionDetail(sessionId);
-  const root = projectsRoot();
+  const host = hostById(hostId ?? "local") ?? hosts()[0];
+  if (source === "codex") return codexSessionDetail(sessionId, host.codexDir, host.label);
+  const root = host.projectsDir;
   const projDir = path.join(root, projName);
   const fp = path.join(projDir, sessionId + ".jsonl");
   if (!fs.existsSync(fp)) return null;
-  const session = scanSession(projName, projDir, sessionId + ".jsonl");
+  const session = scanSession(projName, projDir, sessionId + ".jsonl", host.label);
   const timeline = timelineFromFile(fp);
   for (const sub of session.subagents) {
     timeline.push(

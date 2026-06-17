@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Cell, Legend, CartesianGrid,
+  PieChart, Pie, Cell, CartesianGrid,
 } from "recharts";
 import type { FlatSession } from "../aggregate";
 import { byDay, costByModel, costByProject, topTools, modelColor } from "../aggregate";
@@ -18,6 +18,9 @@ export default function Overview({
   const models = useMemo(() => costByModel(sessions, pricing), [sessions, pricing]);
   const projects = useMemo(() => costByProject(sessions).slice(0, 12), [sessions]);
   const tools = useMemo(() => topTools(sessions), [sessions]);
+
+  // Only models that actually cost something feed the donut.
+  const pieModels = useMemo(() => models.filter((m) => m.cost > 0), [models]);
 
   const totals = useMemo(() => {
     let cost = 0, costLastHour = 0, allTok = 0, prompts = 0, asst = 0, subagents = 0, errors = 0, toolUses = 0;
@@ -39,6 +42,20 @@ export default function Overview({
     for (const d of days) Object.keys(d.byModel).forEach((m) => set.add(m));
     return [...set];
   }, [days]);
+
+  // One name->color map shared by the day bars, the day tooltip (via bar fill),
+  // the donut, and the table — so a model is the same color everywhere. Assign
+  // each model a color exactly once; modelColor uses MODEL_COLORS by name when
+  // known, else a fallback by this single global index (cost-desc, then any
+  // day-only models), avoiding the per-chart index drift that gave the same
+  // fallback model different colors in different charts.
+  const colorOf = useMemo(() => {
+    const map: Record<string, string> = {};
+    let i = 0;
+    for (const m of models) if (!(m.model in map)) map[m.model] = modelColor(m.model, i++);
+    for (const m of modelNames) if (!(m in map)) map[m] = modelColor(m, i++);
+    return map;
+  }, [models, modelNames]);
 
   const dayChartData = useMemo(
     () =>
@@ -70,11 +87,11 @@ export default function Overview({
             <XAxis dataKey="day" stroke="#888" fontSize={11} />
             <YAxis stroke="#888" fontSize={11} tickFormatter={(v) => "$" + v} />
             <Tooltip
-              contentStyle={{ background: "#1c1f26", border: "1px solid #333" }}
-              formatter={(v: any, name: any) => [fmtUsd(Number(v)), name]}
+              content={<DayTooltip />}
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
             />
-            {modelNames.map((m, i) => (
-              <Bar key={m} dataKey={m} stackId="cost" fill={modelColor(m, i)} />
+            {modelNames.map((m) => (
+              <Bar key={m} dataKey={m} stackId="cost" fill={colorOf[m]} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -86,22 +103,21 @@ export default function Overview({
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
-                data={models.filter((m) => m.cost > 0)}
+                data={pieModels}
                 dataKey="cost"
                 nameKey="model"
                 innerRadius={55}
                 outerRadius={95}
                 paddingAngle={2}
               >
-                {models.filter((m) => m.cost > 0).map((m, i) => (
-                  <Cell key={m.model} fill={modelColor(m.model, i)} />
+                {pieModels.map((m) => (
+                  <Cell key={m.model} fill={colorOf[m.model]} />
                 ))}
               </Pie>
               <Tooltip
                 contentStyle={{ background: "#1c1f26", border: "1px solid #333" }}
                 formatter={(v: any) => fmtUsd(Number(v))}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
           <table className="mini">
@@ -111,7 +127,13 @@ export default function Overview({
             <tbody>
               {models.map((m) => (
                 <tr key={m.model}>
-                  <td>{m.model}</td>
+                  <td>
+                    <span
+                      className="legend-swatch"
+                      style={{ background: colorOf[m.model] }}
+                    />
+                    {m.model}
+                  </td>
                   <td>{m.calls.toLocaleString()}</td>
                   <td>{fmtTokens(m.tokens)}</td>
                   <td>{fmtUsd(m.cost)}</td>
@@ -150,6 +172,39 @@ export default function Overview({
           </BarChart>
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
+
+// Tooltip for the per-day cost chart. recharts hands us every stacked series
+// (all models) for the hovered day; show only the ones that actually cost
+// something that day, sorted high→low, so the box stays short and relevant
+// instead of listing ~20 models at $0.00.
+function DayTooltip({ active, payload, label }: any) {
+  if (!active || !Array.isArray(payload)) return null;
+  const rows = payload
+    .filter((p: any) => (p?.value ?? 0) > 0)
+    .sort((a: any, b: any) => b.value - a.value);
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s: number, p: any) => s + p.value, 0);
+  return (
+    <div className="chart-tooltip">
+      <div className="tt-head">{label}</div>
+      {rows.map((p: any) => (
+        <div className="tt-row" key={p.name}>
+          <span className="tt-name">
+            <span className="legend-swatch" style={{ background: p.color || p.fill }} />
+            {p.name}
+          </span>
+          <span className="tt-val">{fmtUsd(p.value)}</span>
+        </div>
+      ))}
+      {rows.length > 1 && (
+        <div className="tt-row tt-total">
+          <span className="tt-name">total</span>
+          <span className="tt-val">{fmtUsd(total)}</span>
+        </div>
+      )}
     </div>
   );
 }

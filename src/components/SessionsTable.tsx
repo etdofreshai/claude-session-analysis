@@ -30,6 +30,7 @@ export default function SessionsTable({
   const [filter, setFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [hostFilter, setHostFilter] = useState("");
   const [windowMs, setWindowMs] = useState<number>(() => {
     const saved = Number(localStorage.getItem("costWindowMs"));
     return WINDOW_OPTIONS.some((o) => o.ms === saved) ? saved : 60 * 60_000;
@@ -55,9 +56,15 @@ export default function SessionsTable({
     [sessions]
   );
 
+  const hostsList = useMemo(
+    () => [...new Set(sessions.map((s) => s.host))].sort(),
+    [sessions]
+  );
+
   const rows = useMemo(() => {
     let r = sessions;
     if (sourceFilter) r = r.filter((s) => s.source === sourceFilter);
+    if (hostFilter) r = r.filter((s) => s.host === hostFilter);
     if (projectFilter) r = r.filter((s) => s.projectDisplay === projectFilter);
     if (filter) {
       const f = filter.toLowerCase();
@@ -82,7 +89,7 @@ export default function SessionsTable({
       }
     };
     return [...r].sort((a, b) => (desc ? key(b) - key(a) : key(a) - key(b)));
-  }, [sessions, sortKey, desc, filter, projectFilter, sourceFilter, winCost]);
+  }, [sessions, sortKey, desc, filter, projectFilter, sourceFilter, hostFilter, winCost]);
 
   const th = (label: string, k: SortKey) => (
     <th
@@ -109,6 +116,14 @@ export default function SessionsTable({
           <option value="claude">Claude</option>
           <option value="codex">Codex</option>
         </select>
+        {hostsList.length > 1 && (
+          <select value={hostFilter} onChange={(e) => setHostFilter(e.target.value)}>
+            <option value="">All hosts</option>
+            {hostsList.map((h) => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
+        )}
         <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
           <option value="">All projects</option>
           {projects.map((p) => (
@@ -137,6 +152,7 @@ export default function SessionsTable({
           <tr>
             {th("Last activity", "date")}
             <th>Src</th>
+            <th>Host</th>
             <th>Project</th>
             <th>Title / last prompt</th>
             <th>Models</th>
@@ -154,6 +170,9 @@ export default function SessionsTable({
               <td className="nowrap">{fmtDateTimeCT(s.lastTs ?? s.firstTs)}</td>
               <td className="nowrap">
                 <span className={`chip chip-src chip-${s.source}`}>{s.source}</span>
+              </td>
+              <td className="nowrap">
+                <span className="chip chip-host">{s.host}</span>
               </td>
               <td className="nowrap">{s.projectDisplay}</td>
               <td className="title-cell" title={s.lastPrompt ?? ""}>

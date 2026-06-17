@@ -21,6 +21,8 @@ export type HourlyUsage = Record<string, Record<string, ModelUsage>>;
 
 export interface SubagentStats {
   id: string;
+  /** Source machine label this transcript came from (e.g. "local", "etzevox2") */
+  host: string;
   file: string;
   sizeBytes: number;
   firstTs: string | null;
@@ -49,6 +51,8 @@ export type SessionSource = "claude" | "codex";
 
 export interface SessionStats {
   id: string;
+  /** Source machine label this session came from (e.g. "local", "etzevox2") */
+  host: string;
   project: string;
   file: string;
   source: SessionSource;
@@ -77,15 +81,40 @@ export interface SessionStats {
 export interface ProjectStats {
   /** Raw directory name, e.g. C--Users-etgarcia-workspace */
   name: string;
+  /** Source machine label this project's sessions came from */
+  host: string;
   /** Best-effort real path derived from cwd fields in transcripts */
   displayPath: string | null;
   sessions: SessionStats[];
+}
+
+export interface HostInfo {
+  id: string;
+  label: string;
+  /** true if pulled over SSH, false for the local machine */
+  remote: boolean;
+}
+
+/** Result of the most recent rsync attempt for one remote host. */
+export interface HostSyncStatus {
+  id: string;
+  label: string;
+  ssh: string | null;
+  ok: boolean;
+  error: string | null;
+  /** epoch ms when the last sync attempt completed, or null if never */
+  lastSyncMs: number | null;
+  durationMs: number | null;
 }
 
 export interface StatsResponse {
   generatedAt: string;
   scanMs: number;
   root: string;
+  /** Every machine contributing sessions (local + remotes) */
+  hosts: HostInfo[];
+  /** Per-remote sync status from the most recent pull */
+  sync: HostSyncStatus[];
   projects: ProjectStats[];
 }
 

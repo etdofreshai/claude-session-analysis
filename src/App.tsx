@@ -23,7 +23,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [pricing, setPricing] = useState<PricingTable>(() => loadPricing());
-  const [selected, setSelected] = useState<{ project: string; id: string; source: string } | null>(null);
+  const [selected, setSelected] = useState<{ project: string; id: string; source: string; host: string } | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const refresh = async () => {
@@ -72,10 +72,28 @@ export default function App() {
           {stats && (
             <span className="sub">
               {sessions.length} sessions · {stats.projects.length} projects ·
-              scanned in {stats.scanMs}ms
+              {stats.hosts.length} hosts · scanned in {stats.scanMs}ms
             </span>
           )}
         </h1>
+        {stats && stats.sync.length > 0 && (
+          <div className="sync-status">
+            {stats.sync.map((s) => (
+              <span
+                key={s.id}
+                className={"sync-host " + (s.ok ? "ok" : "err")}
+                title={
+                  (s.error ? `error: ${s.error}\n` : "") +
+                  (s.lastSyncMs
+                    ? `last sync: ${new Date(s.lastSyncMs).toLocaleTimeString()} (${s.durationMs}ms)`
+                    : "never synced")
+                }
+              >
+                {s.ok ? "●" : "○"} {s.label}
+              </span>
+            ))}
+          </div>
+        )}
         <nav>
           <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>Overview</button>
           <button className={tab === "sessions" ? "active" : ""} onClick={() => setTab("sessions")}>Sessions</button>
@@ -103,7 +121,7 @@ export default function App() {
         <SessionsTable
           sessions={sessions}
           pricing={pricing}
-          onSelect={(s) => setSelected({ project: s.project, id: s.id, source: s.source })}
+          onSelect={(s) => setSelected({ project: s.project, id: s.id, source: s.source, host: s.host })}
         />
       )}
       {tab === "pricing" && (
@@ -115,6 +133,7 @@ export default function App() {
           project={selected.project}
           id={selected.id}
           source={selected.source}
+          host={selected.host}
           pricing={pricing}
           onClose={() => setSelected(null)}
         />
