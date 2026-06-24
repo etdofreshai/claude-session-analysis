@@ -83,12 +83,11 @@ export default function App() {
                 key={s.id}
                 className={"sync-host " + (s.ok ? "ok" : "err")}
                 title={
-                  !s.ssh
-                    ? "local machine — scanned directly (no SSH sync)"
-                    : (s.error ? `error: ${s.error}\n` : "") +
-                      (s.lastSyncMs
-                        ? `last sync: ${new Date(s.lastSyncMs).toLocaleTimeString()} (${s.durationMs}ms)`
-                        : "never synced")
+                  (s.id === "local" ? "this machine — local archive\n" : "") +
+                  (s.error ? `error: ${s.error}\n` : "") +
+                  (s.lastSyncMs
+                    ? `last sync: ${new Date(s.lastSyncMs).toLocaleTimeString()} (${s.durationMs}ms)`
+                    : "never synced")
                 }
               >
                 {s.ok ? "●" : "○"} {s.label}

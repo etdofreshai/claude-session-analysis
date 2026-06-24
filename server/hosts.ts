@@ -13,9 +13,15 @@ export interface HostSpec {
   projectsDir: string;
   /** Local path to the Codex sessions dir to scan. */
   codexDir: string;
-  /** Remote-side rsync source for Claude projects (default "~/.claude/projects/"). */
+  /**
+   * rsync SOURCE for Claude projects. For SSH remotes this is an SSH-side,
+   * home-relative path (e.g. ".claude/projects/"); for the local host it is an
+   * ABSOLUTE local path (e.g. "/Users/you/.claude/projects/"). A trailing slash
+   * is REQUIRED so rsync copies the directory CONTENTS (not a nested subdir).
+   * Empty string means "this host is scanned in place; do not rsync".
+   */
   remoteProjects: string;
-  /** Remote-side rsync source for Codex sessions (default "~/.codex/sessions/"). */
+  /** rsync SOURCE for Codex sessions; same conventions as remoteProjects. */
   remoteCodex: string;
   /**
    * --rsync-path override: the command to run on the remote to invoke rsync.
@@ -71,18 +77,27 @@ export function hosts(): HostSpec[] {
   if (cached) return cached;
   const list: HostSpec[] = [];
 
+  const localLabel = process.env.CLAUDE_LOCAL_LABEL ?? "etzmacminim2";
+  const localStage = path.join(remoteStageRoot(), localLabel);
   list.push({
     id: "local",
-    label: process.env.CLAUDE_LOCAL_LABEL ?? "etzmacminim2",
+    label: localLabel,
     ssh: null,
-    projectsDir:
-      process.env.CLAUDE_PROJECTS_DIR ??
-      path.join(os.homedir(), ".claude", "projects"),
-    codexDir:
-      process.env.CODEX_SESSIONS_DIR ??
-      path.join(os.homedir(), ".codex", "sessions"),
-    remoteProjects: "",
-    remoteCodex: "",
+    // Scan the durable staging archive, NOT the live dir, so a deleted live
+    // session survives in the dashboard (the local rsync below is append/update
+    // only — no --delete).
+    projectsDir: path.join(localStage, "projects"),
+    codexDir: path.join(localStage, "codex"),
+    // COPY SOURCE for the local self-archive rsync: the LIVE dirs. Absolute
+    // paths, trailing slash mandatory (copies contents into the stage dir).
+    // The CLAUDE_PROJECTS_DIR / CODEX_SESSIONS_DIR env overrides now select the
+    // SOURCE that gets archived (was: the scan target).
+    remoteProjects:
+      (process.env.CLAUDE_PROJECTS_DIR ??
+        path.join(os.homedir(), ".claude", "projects")) + "/",
+    remoteCodex:
+      (process.env.CODEX_SESSIONS_DIR ??
+        path.join(os.homedir(), ".codex", "sessions")) + "/",
     rsyncPath: null,
   });
 

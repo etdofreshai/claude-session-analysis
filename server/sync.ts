@@ -27,15 +27,16 @@ async function rsyncPull(
   dest: string
 ): Promise<void> {
   fs.mkdirSync(dest, { recursive: true });
-  const args = [
-    "-az",
-    "--delete",
-    "--timeout=25",
-    "-e", `ssh ${SSH_OPTS.join(" ")}`,
-  ];
+  const args = ["-az", "--timeout=25"];
+  // SSH transport only for remote hosts; the local host rsyncs filesystem→
+  // filesystem with no -e and a bare (non-prefixed) source path.
+  if (h.ssh) args.push("-e", `ssh ${SSH_OPTS.join(" ")}`);
   // Windows hosts have no native rsync — run it through WSL on the remote.
   if (h.rsyncPath) args.push("--rsync-path", h.rsyncPath);
-  args.push(`${h.ssh}:${src}`, dest.endsWith("/") ? dest : dest + "/");
+  args.push(
+    h.ssh ? `${h.ssh}:${src}` : src,
+    dest.endsWith("/") ? dest : dest + "/"
+  );
   await execFileP("rsync", args, {
     timeout: 120_000,
     maxBuffer: 16 * 1024 * 1024,
@@ -43,7 +44,7 @@ async function rsyncPull(
 }
 
 async function syncHost(h: HostSpec): Promise<void> {
-  if (!h.ssh) return;
+  if (!h.remoteProjects) return;
   const t0 = Date.now();
   let ok = true;
   let error: string | null = null;
@@ -71,7 +72,7 @@ async function syncHost(h: HostSpec): Promise<void> {
 }
 
 async function doSync(): Promise<void> {
-  const remotes = hosts().filter((h) => h.ssh);
+  const remotes = hosts().filter((h) => h.remoteProjects);
   await Promise.all(remotes.map((h) => syncHost(h)));
 }
 
@@ -95,10 +96,10 @@ export function ensureSynced(): HostSyncStatus[] {
 
 export function statusList(): HostSyncStatus[] {
   return hosts().map((h) => {
-    // The local machine isn't pulled over SSH — it's scanned in place, so it
-    // always counts as "ok" and has no rsync status to report. It's still
-    // listed here so it shows up in the dashboard's host status bar.
-    if (!h.ssh) {
+    // Hosts with no rsync source (pure scan-in-place) have no sync status; they
+    // always count as ok and are listed only so they appear in the dashboard's
+    // host bar.
+    if (!h.remoteProjects) {
       return {
         id: h.id,
         label: h.label,
