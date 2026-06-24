@@ -1,10 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, CartesianGrid,
 } from "recharts";
-import type { FlatSession } from "../aggregate";
-import { byDay, costByModel, costByProject, topTools, modelColor } from "../aggregate";
+import type { FlatSession, RangeKey } from "../aggregate";
+import {
+  byDay, costByModel, costByProject, topTools, modelColor,
+  RANGES, rangeFromDay, windowTotals,
+} from "../aggregate";
 import type { PricingTable } from "../pricing";
 import { fmtTokens, fmtUsd } from "../pricing";
 
@@ -14,28 +17,29 @@ export default function Overview({
   sessions: FlatSession[];
   pricing: PricingTable;
 }) {
-  const days = useMemo(() => byDay(sessions, pricing), [sessions, pricing]);
-  const models = useMemo(() => costByModel(sessions, pricing), [sessions, pricing]);
-  const projects = useMemo(() => costByProject(sessions).slice(0, 12), [sessions]);
-  const tools = useMemo(() => topTools(sessions), [sessions]);
+  const [range, setRange] = useState<RangeKey>("all");
+  // Recompute the window anchor when the data refreshes (not on every render).
+  const now = useMemo(() => Date.now(), [sessions]);
+  const rangeDef = RANGES.find((r) => r.key === range)!;
+  const fromDay = useMemo(() => rangeFromDay(rangeDef.days, now), [rangeDef, now]);
+  // Suffix appended to windowed card/chart labels (blank for all-time).
+  const suffix = range === "all" ? "" : ` (${rangeDef.label})`;
+
+  const days = useMemo(() => byDay(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
+  const models = useMemo(() => costByModel(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
+  const projects = useMemo(() => costByProject(sessions, pricing, fromDay).slice(0, 12), [sessions, pricing, fromDay]);
+  const tools = useMemo(() => topTools(sessions, 15, fromDay), [sessions, fromDay]);
 
   // Only models that actually cost something feed the donut.
   const pieModels = useMemo(() => models.filter((m) => m.cost > 0), [models]);
 
-  const totals = useMemo(() => {
-    let cost = 0, costLastHour = 0, allTok = 0, prompts = 0, asst = 0, subagents = 0, errors = 0, toolUses = 0;
-    for (const s of sessions) {
-      cost += s.cost + s.subagentCost;
-      costLastHour += s.costLastHour;
-      allTok += s.totalTokensAll;
-      prompts += s.counts.userPrompts;
-      asst += s.counts.assistantMsgs;
-      subagents += s.subagents.length;
-      errors += s.counts.apiErrors;
-      toolUses += s.counts.toolUses;
-    }
-    return { cost, costLastHour, allTok, prompts, asst, subagents, errors, toolUses };
-  }, [sessions]);
+  // Cost/token totals + message counts scoped to the selected window.
+  const totals = useMemo(() => windowTotals(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
+  // "Last 1h" is a live, window-independent metric — always across all sessions.
+  const costLastHour = useMemo(
+    () => sessions.reduce((a, s) => a + s.costLastHour, 0),
+    [sessions]
+  );
 
   const modelNames = useMemo(() => {
     const set = new Set<string>();
@@ -68,19 +72,32 @@ export default function Overview({
 
   return (
     <div className="page">
+      <div className="range-bar">
+        <span className="range-label">Range</span>
+        {RANGES.map((r) => (
+          <button
+            key={r.key}
+            className={range === r.key ? "active" : ""}
+            onClick={() => setRange(r.key)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
       <div className="cards">
-        <Card label="Est. total cost" value={fmtUsd(totals.cost)} />
-        <Card label="Est. cost (last 1h)" value={fmtUsd(totals.costLastHour)} />
-        <Card label="Total tokens (incl. cache)" value={fmtTokens(totals.allTok)} />
-        <Card label="User prompts" value={totals.prompts.toLocaleString()} />
-        <Card label="Assistant messages" value={totals.asst.toLocaleString()} />
-        <Card label="Tool calls" value={totals.toolUses.toLocaleString()} />
-        <Card label="Subagent runs" value={totals.subagents.toLocaleString()} />
-        <Card label="API errors" value={totals.errors.toLocaleString()} />
+        <Card label={`Est. total cost${suffix}`} value={fmtUsd(totals.cost)} />
+        <Card label="Est. cost (last 1h)" value={fmtUsd(costLastHour)} />
+        <Card label={`Total tokens (incl. cache)${suffix}`} value={fmtTokens(totals.allTok)} />
+        <Card label={`User prompts${suffix}`} value={totals.prompts.toLocaleString()} />
+        <Card label={`Assistant messages${suffix}`} value={totals.asst.toLocaleString()} />
+        <Card label={`Tool calls${suffix}`} value={totals.toolUses.toLocaleString()} />
+        <Card label={`Subagent runs${suffix}`} value={totals.subagents.toLocaleString()} />
+        <Card label={`API errors${suffix}`} value={totals.errors.toLocaleString()} />
       </div>
 
       <div className="panel">
-        <h2>Estimated cost per day (by model)</h2>
+        <h2>Estimated cost per day (by model){suffix}</h2>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={dayChartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -99,7 +116,7 @@ export default function Overview({
 
       <div className="panel-row">
         <div className="panel half">
-          <h2>Cost by model</h2>
+          <h2>Cost by model{suffix}</h2>
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
@@ -144,7 +161,7 @@ export default function Overview({
         </div>
 
         <div className="panel half">
-          <h2>Cost by project (top 12)</h2>
+          <h2>Cost by project (top 12){suffix}</h2>
           <ResponsiveContainer width="100%" height={Math.max(260, projects.length * 30)}>
             <BarChart data={projects} layout="vertical" margin={{ left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -161,7 +178,7 @@ export default function Overview({
       </div>
 
       <div className="panel">
-        <h2>Most used tools</h2>
+        <h2>Most used tools{suffix}</h2>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={tools}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />

@@ -4,7 +4,9 @@ import os from "node:os";
 import { scanCodexAll, codexSessionDetail } from "./codex-scanner";
 import { hosts, hostById, type HostSpec } from "./hosts";
 import { ensureSynced } from "./sync";
+import { ctDay } from "./ct-day";
 import type {
+  DailyUsage,
   HourlyUsage,
   ModelUsage,
   ProjectStats,
@@ -61,6 +63,7 @@ interface ParsedTranscript {
   toolCalls: Record<string, number>;
   recordTypes: Record<string, number>;
   hourlyUsage: HourlyUsage;
+  dailyUsage: DailyUsage;
 }
 
 function parseTranscript(filePath: string): ParsedTranscript {
@@ -89,6 +92,7 @@ function parseTranscript(filePath: string): ParsedTranscript {
     toolCalls: {},
     recordTypes: {},
     hourlyUsage: {},
+    dailyUsage: {},
   };
 
   let text: string;
@@ -186,6 +190,9 @@ function parseTranscript(filePath: string): ParsedTranscript {
             const hour = String(o.timestamp).slice(0, 13); // "2026-06-10T16"
             const hb = (out.hourlyUsage[hour] ??= {});
             targets.push((hb[model] ??= emptyUsage()));
+            const day = ctDay(o.timestamp); // "2026-06-10" in Central Time
+            const db = (out.dailyUsage[day] ??= {});
+            targets.push((db[model] ??= emptyUsage()));
           }
           for (const mu of targets) {
             mu.calls++;
@@ -267,6 +274,7 @@ function scanSubagents(projDir: string, sessionId: string, host: string): Subage
         toolCalls: p.toolCalls,
         agentName: p.agentName,
         hourlyUsage: p.hourlyUsage,
+        dailyUsage: p.dailyUsage,
       };
     });
   });
@@ -327,6 +335,7 @@ function scanSession(
       toolCalls: p.toolCalls,
       recordTypes: p.recordTypes,
       hourlyUsage: p.hourlyUsage,
+      dailyUsage: p.dailyUsage,
     };
     return stats;
   });

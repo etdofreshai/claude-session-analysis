@@ -59,6 +59,10 @@ input, select {
   white-space: pre-wrap;
 }
 
+.range-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+.range-bar .range-label { font-size: 12px; color: var(--muted); margin-right: 4px; }
+.range-bar button { padding: 4px 12px; font-size: 12px; }
+
 .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;

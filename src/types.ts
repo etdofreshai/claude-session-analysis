@@ -19,6 +19,14 @@ export interface ModelUsage {
  */
 export type HourlyUsage = Record<string, Record<string, ModelUsage>>;
 
+/**
+ * Token usage bucketed by Central-Time calendar day ("2026-06-10") and model.
+ * Unlike hourlyUsage (which is trimmed to the trailing 48h), this keeps the
+ * FULL history, so the per-day cost chart can attribute each day's spend to the
+ * day it actually happened rather than dumping a whole session onto its last day.
+ */
+export type DailyUsage = Record<string, Record<string, ModelUsage>>;
+
 export interface SubagentStats {
   id: string;
   /** Source machine label this transcript came from (e.g. "local", "etzevox2") */
@@ -33,6 +41,7 @@ export interface SubagentStats {
   toolCalls: Record<string, number>;
   agentName: string | null;
   hourlyUsage: HourlyUsage;
+  dailyUsage: DailyUsage;
 }
 
 export interface SessionCounts {
@@ -76,6 +85,7 @@ export interface SessionStats {
   subagents: SubagentStats[];
   recordTypes: Record<string, number>;
   hourlyUsage: HourlyUsage;
+  dailyUsage: DailyUsage;
 }
 
 export interface ProjectStats {

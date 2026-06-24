@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { ctDay } from "./ct-day";
 import type {
+  DailyUsage,
   HourlyUsage,
   ModelUsage,
   ProjectStats,
@@ -51,6 +53,7 @@ interface ParsedCodex {
   toolCalls: Record<string, number>;
   recordTypes: Record<string, number>;
   hourlyUsage: HourlyUsage;
+  dailyUsage: DailyUsage;
 }
 
 const TOOL_CALL_TYPES = new Set([
@@ -85,6 +88,7 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
     toolCalls: {},
     recordTypes: {},
     hourlyUsage: {},
+    dailyUsage: {},
   };
 
   let text: string;
@@ -160,6 +164,9 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
               const hour = String(ts).slice(0, 13);
               const hb = (out.hourlyUsage[hour] ??= {});
               targets.push((hb[curModel] ??= emptyUsage()));
+              const day = ctDay(ts); // "2026-06-10" in Central Time
+              const db = (out.dailyUsage[day] ??= {});
+              targets.push((db[curModel] ??= emptyUsage()));
             }
             const cached = u.cached_input_tokens || 0;
             const input = (u.input_tokens || 0) - cached;
@@ -318,6 +325,7 @@ function scanCodexSession(file: string, host: string): SessionStats {
       subagents: [],
       recordTypes: p.recordTypes,
       hourlyUsage: p.hourlyUsage,
+      dailyUsage: p.dailyUsage,
     };
     return stats;
   });
