@@ -3,10 +3,10 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, CartesianGrid,
 } from "recharts";
-import type { FlatSession, RangeKey } from "../aggregate";
+import type { FlatSession, RangeKey, HourRangeKey, Granularity } from "../aggregate";
 import {
-  byDay, costByModel, costByProject, topTools, modelColor,
-  RANGES, rangeFromDay, windowTotals,
+  byDay, byHour, costByModel, costByProject, topTools, modelColor,
+  RANGES, HOUR_RANGES, windowTotals,
 } from "../aggregate";
 import type { PricingTable } from "../pricing";
 import { fmtTokens, fmtUsd } from "../pricing";
@@ -17,24 +17,39 @@ export default function Overview({
   sessions: FlatSession[];
   pricing: PricingTable;
 }) {
-  const [range, setRange] = useState<RangeKey>("all");
+  // Time granularity for the trend chart, plus a remembered range per mode.
+  const [gran, setGran] = useState<Granularity>("day");
+  const [dayRange, setDayRange] = useState<RangeKey>("all");
+  const [hourRange, setHourRange] = useState<HourRangeKey>("24h");
+
   // Recompute the window anchor when the data refreshes (not on every render).
   const now = useMemo(() => Date.now(), [sessions]);
-  const rangeDef = RANGES.find((r) => r.key === range)!;
-  const fromDay = useMemo(() => rangeFromDay(rangeDef.days, now), [rangeDef, now]);
-  // Suffix appended to windowed card/chart labels (blank for all-time).
-  const suffix = range === "all" ? "" : ` (${rangeDef.label})`;
+  const activeRange =
+    gran === "hour"
+      ? HOUR_RANGES.find((r) => r.key === hourRange)!
+      : RANGES.find((r) => r.key === dayRange)!;
+  const fromMs = useMemo(
+    () => (activeRange.windowMs == null ? null : now - activeRange.windowMs),
+    [activeRange, now]
+  );
+  // Suffix appended to windowed card/chart labels (blank only for daily all-time).
+  const suffix =
+    gran === "day" && dayRange === "all" ? "" : ` (${activeRange.label})`;
 
-  const days = useMemo(() => byDay(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
-  const models = useMemo(() => costByModel(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
-  const projects = useMemo(() => costByProject(sessions, pricing, fromDay).slice(0, 12), [sessions, pricing, fromDay]);
-  const tools = useMemo(() => topTools(sessions, 15, fromDay), [sessions, fromDay]);
+  // The trend chart's buckets: per-hour or per-day, both stacked by model.
+  const buckets = useMemo(
+    () => (gran === "hour" ? byHour(sessions, pricing, fromMs) : byDay(sessions, pricing, fromMs)),
+    [gran, sessions, pricing, fromMs]
+  );
+  const models = useMemo(() => costByModel(sessions, pricing, fromMs), [sessions, pricing, fromMs]);
+  const projects = useMemo(() => costByProject(sessions, pricing, fromMs).slice(0, 12), [sessions, pricing, fromMs]);
+  const tools = useMemo(() => topTools(sessions, 15, fromMs), [sessions, fromMs]);
 
   // Only models that actually cost something feed the donut.
   const pieModels = useMemo(() => models.filter((m) => m.cost > 0), [models]);
 
   // Cost/token totals + message counts scoped to the selected window.
-  const totals = useMemo(() => windowTotals(sessions, pricing, fromDay), [sessions, pricing, fromDay]);
+  const totals = useMemo(() => windowTotals(sessions, pricing, fromMs), [sessions, pricing, fromMs]);
   // "Last 1h" is a live, window-independent metric — always across all sessions.
   const costLastHour = useMemo(
     () => sessions.reduce((a, s) => a + s.costLastHour, 0),
@@ -43,15 +58,15 @@ export default function Overview({
 
   const modelNames = useMemo(() => {
     const set = new Set<string>();
-    for (const d of days) Object.keys(d.byModel).forEach((m) => set.add(m));
+    for (const d of buckets) Object.keys(d.byModel).forEach((m) => set.add(m));
     return [...set];
-  }, [days]);
+  }, [buckets]);
 
-  // One name->color map shared by the day bars, the day tooltip (via bar fill),
+  // One name->color map shared by the trend bars, the bar tooltip (via bar fill),
   // the donut, and the table — so a model is the same color everywhere. Assign
   // each model a color exactly once; modelColor uses MODEL_COLORS by name when
   // known, else a fallback by this single global index (cost-desc, then any
-  // day-only models), avoiding the per-chart index drift that gave the same
+  // bucket-only models), avoiding the per-chart index drift that gave the same
   // fallback model different colors in different charts.
   const colorOf = useMemo(() => {
     const map: Record<string, string> = {};
@@ -61,28 +76,39 @@ export default function Overview({
     return map;
   }, [models, modelNames]);
 
-  const dayChartData = useMemo(
+  const chartData = useMemo(
     () =>
-      days.map((d) => ({
-        day: d.day.slice(5),
+      buckets.map((d) => ({
+        label: d.label,
         ...Object.fromEntries(modelNames.map((m) => [m, +(d.byModel[m] ?? 0).toFixed(2)])),
       })),
-    [days, modelNames]
+    [buckets, modelNames]
   );
+  // Thin x-axis ticks when there are many buckets (e.g. up to 168 hourly bars).
+  const tickInterval = chartData.length > 24 ? Math.ceil(chartData.length / 16) : 0;
 
   return (
     <div className="page">
       <div className="range-bar">
-        <span className="range-label">Range</span>
-        {RANGES.map((r) => (
-          <button
-            key={r.key}
-            className={range === r.key ? "active" : ""}
-            onClick={() => setRange(r.key)}
-          >
-            {r.label}
-          </button>
-        ))}
+        <button className={gran === "day" ? "active" : ""} onClick={() => setGran("day")}>Daily</button>
+        <button className={gran === "hour" ? "active" : ""} onClick={() => setGran("hour")}>Hourly</button>
+        <span className="range-sep" />
+        {(gran === "hour" ? HOUR_RANGES : RANGES).map((r) => {
+          const selected = gran === "hour" ? hourRange === r.key : dayRange === r.key;
+          return (
+            <button
+              key={r.key}
+              className={selected ? "active" : ""}
+              onClick={() =>
+                gran === "hour"
+                  ? setHourRange(r.key as HourRangeKey)
+                  : setDayRange(r.key as RangeKey)
+              }
+            >
+              {r.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="cards">
@@ -97,14 +123,22 @@ export default function Overview({
       </div>
 
       <div className="panel">
-        <h2>Estimated cost per day (by model){suffix}</h2>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={dayChartData}>
+        <h2>Estimated cost per {gran === "hour" ? "hour" : "day"} (by model){suffix}</h2>
+        <ResponsiveContainer width="100%" height={gran === "hour" ? 310 : 280}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis dataKey="day" stroke="#888" fontSize={11} />
+            <XAxis
+              dataKey="label"
+              stroke="#888"
+              fontSize={11}
+              interval={tickInterval}
+              angle={gran === "hour" ? -35 : 0}
+              textAnchor={gran === "hour" ? "end" : "middle"}
+              height={gran === "hour" ? 64 : 30}
+            />
             <YAxis stroke="#888" fontSize={11} tickFormatter={(v) => "$" + v} />
             <Tooltip
-              content={<DayTooltip />}
+              content={<BucketTooltip />}
               cursor={{ fill: "rgba(255,255,255,0.04)" }}
             />
             {modelNames.map((m) => (
@@ -193,11 +227,11 @@ export default function Overview({
   );
 }
 
-// Tooltip for the per-day cost chart. recharts hands us every stacked series
-// (all models) for the hovered day; show only the ones that actually cost
-// something that day, sorted high→low, so the box stays short and relevant
-// instead of listing ~20 models at $0.00.
-function DayTooltip({ active, payload, label }: any) {
+// Tooltip for the per-bucket cost chart (daily or hourly). recharts hands us
+// every stacked series (all models) for the hovered bucket; show only the ones
+// that actually cost something, sorted high→low, so the box stays short and
+// relevant instead of listing ~20 models at $0.00.
+function BucketTooltip({ active, payload, label }: any) {
   if (!active || !Array.isArray(payload)) return null;
   const rows = payload
     .filter((p: any) => (p?.value ?? 0) > 0)

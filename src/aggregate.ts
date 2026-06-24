@@ -3,22 +3,31 @@ import type { PricingTable } from "./pricing";
 import { dayCT, modelsCost, usageCost } from "./pricing";
 
 export type RangeKey = "1w" | "1m" | "3m" | "6m" | "1y" | "all";
+export type HourRangeKey = "6h" | "12h" | "24h" | "48h" | "120h" | "168h";
+export type Granularity = "day" | "hour";
 
-/** Overview lookback ranges. days=null means all-time. */
-export const RANGES: { key: RangeKey; label: string; days: number | null }[] = [
-  { key: "1w", label: "1W", days: 7 },
-  { key: "1m", label: "1M", days: 30 },
-  { key: "3m", label: "3M", days: 91 },
-  { key: "6m", label: "6M", days: 182 },
-  { key: "1y", label: "1Y", days: 365 },
-  { key: "all", label: "All", days: null },
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+
+/** Daily lookback ranges (windowMs=null means all-time). */
+export const RANGES: { key: RangeKey; label: string; windowMs: number | null }[] = [
+  { key: "1w", label: "1W", windowMs: 7 * DAY_MS },
+  { key: "1m", label: "1M", windowMs: 30 * DAY_MS },
+  { key: "3m", label: "3M", windowMs: 91 * DAY_MS },
+  { key: "6m", label: "6M", windowMs: 182 * DAY_MS },
+  { key: "1y", label: "1Y", windowMs: 365 * DAY_MS },
+  { key: "all", label: "All", windowMs: null },
 ];
 
-/** First Central-Time day (YYYY-MM-DD) included by a range, or null for all-time. */
-export function rangeFromDay(days: number | null, now: number): string | null {
-  if (days == null) return null;
-  return dayCT(new Date(now - days * 86_400_000).toISOString());
-}
+/** Hourly lookback ranges (all finite). 120h = 5 days, 168h = 1 week. */
+export const HOUR_RANGES: { key: HourRangeKey; label: string; windowMs: number }[] = [
+  { key: "6h", label: "6H", windowMs: 6 * HOUR_MS },
+  { key: "12h", label: "12H", windowMs: 12 * HOUR_MS },
+  { key: "24h", label: "24H", windowMs: 24 * HOUR_MS },
+  { key: "48h", label: "48H", windowMs: 48 * HOUR_MS },
+  { key: "120h", label: "120H", windowMs: 120 * HOUR_MS },
+  { key: "168h", label: "1W", windowMs: 168 * HOUR_MS },
+];
 
 export interface FlatSession extends SessionStats {
   projectDisplay: string;
@@ -100,33 +109,60 @@ export function allDailyUsage(s: SessionStats): Record<string, Record<string, Mo
   return byDayMap;
 }
 
-/** model→usage merged across only the days of `s` on/after fromDay (null = all). */
-export function windowedUsage(
-  s: SessionStats,
-  fromDay: string | null
-): Record<string, ModelUsage> {
-  if (!fromDay) return allUsage(s);
-  const daily = allDailyUsage(s);
-  const days = Object.keys(daily);
-  if (days.length === 0) {
-    // Degenerate transcript with no per-day usage: attribute to its
-    // last-activity day, included only if that day falls in the window.
-    const ts = s.lastTs ?? s.firstTs;
-    return ts && dayCT(ts) >= fromDay ? allUsage(s) : {};
-  }
-  const merged: Record<string, ModelUsage> = {};
-  for (const [day, models] of Object.entries(daily))
-    if (day >= fromDay) mergeUsage(merged, models);
+/** Start-of-hour epoch ms for an hourly bucket key "YYYY-MM-DDTHH" (UTC). */
+export function hourStartMs(hourKey: string): number {
+  return Date.parse(hourKey + ":00:00Z");
+}
+
+/** Session + subagent usage merged per UTC hour: "YYYY-MM-DDTHH" -> model -> usage */
+export function allHourlyUsage(s: SessionStats): HourlyUsage {
+  const merged: HourlyUsage = {};
+  const add = (h: HourlyUsage | undefined) => {
+    for (const [hr, models] of Object.entries(h ?? {}))
+      mergeUsage((merged[hr] ??= {}), models);
+  };
+  add(s.hourlyUsage);
+  for (const sub of s.subagents) add(sub.hourlyUsage);
   return merged;
 }
 
-/** Did `s` have any activity on/after fromDay (null = always true)? */
-export function sessionInWindow(s: SessionStats, fromDay: string | null): boolean {
-  if (!fromDay) return true;
-  const days = Object.keys(allDailyUsage(s));
-  if (days.length) return days.some((d) => d >= fromDay);
+/**
+ * model→usage merged across only the hourly buckets of `s` that start on/after
+ * fromMs (null = all time). Hourly buckets are the finest data we keep, so this
+ * windows precisely to the hour for both the daily and hourly views.
+ */
+export function windowedUsage(
+  s: SessionStats,
+  fromMs: number | null
+): Record<string, ModelUsage> {
+  if (fromMs == null) return allUsage(s);
+  // Fast reject: if the session's last activity predates the window, no bucket
+  // can qualify — skip building its hourly map.
+  const last = s.lastTs ? Date.parse(s.lastTs) : NaN;
+  if (!Number.isNaN(last) && last < fromMs) return {};
+  const hourly = allHourlyUsage(s);
+  const keys = Object.keys(hourly);
+  if (keys.length === 0) {
+    // Degenerate transcript with no per-hour usage: attribute to its
+    // last-activity time, included only if it falls in the window.
+    const ts = s.lastTs ?? s.firstTs;
+    return ts && Date.parse(ts) >= fromMs ? allUsage(s) : {};
+  }
+  const merged: Record<string, ModelUsage> = {};
+  for (const [hr, models] of Object.entries(hourly))
+    if (hourStartMs(hr) >= fromMs) mergeUsage(merged, models);
+  return merged;
+}
+
+/** Did `s` have any activity on/after fromMs (null = always true)? */
+export function sessionInWindow(s: SessionStats, fromMs: number | null): boolean {
+  if (fromMs == null) return true;
+  const last = s.lastTs ? Date.parse(s.lastTs) : NaN;
+  if (!Number.isNaN(last) && last < fromMs) return false;
+  const keys = Object.keys(allHourlyUsage(s));
+  if (keys.length) return keys.some((hr) => hourStartMs(hr) >= fromMs);
   const ts = s.lastTs ?? s.firstTs;
-  return ts ? dayCT(ts) >= fromDay : false;
+  return ts ? Date.parse(ts) >= fromMs : false;
 }
 
 export interface WindowTotals {
@@ -141,24 +177,24 @@ export interface WindowTotals {
 }
 
 /**
- * Overview header totals scoped to a window. Cost/tokens are day-accurate (only
- * the in-window days of each session count); the message/tool COUNTS are
- * whole-session (no per-day breakdown exists) for every session active in the
- * window. The trailing-hour cost is intentionally excluded — it's a
+ * Overview header totals scoped to a window. Cost/tokens are hour-accurate (only
+ * the in-window hourly buckets of each session count); the message/tool COUNTS
+ * are whole-session (no per-hour breakdown exists) for every session active in
+ * the window. The trailing-hour cost is intentionally excluded — it's a
  * window-independent live metric computed separately by the caller.
  */
 export function windowTotals(
   sessions: FlatSession[],
   pricing: PricingTable,
-  fromDay: string | null = null
+  fromMs: number | null = null
 ): WindowTotals {
   const t: WindowTotals = {
     cost: 0, allTok: 0, prompts: 0, asst: 0,
     subagents: 0, errors: 0, toolUses: 0, sessions: 0,
   };
   for (const s of sessions) {
-    if (!sessionInWindow(s, fromDay)) continue;
-    const u = windowedUsage(s, fromDay);
+    if (!sessionInWindow(s, fromMs)) continue;
+    const u = windowedUsage(s, fromMs);
     t.cost += modelsCost(u, pricing);
     for (const m of Object.values(u))
       t.allTok += m.input + m.output + m.cacheRead + m.cacheWrite5m + m.cacheWrite1h;
@@ -194,26 +230,38 @@ export function flatten(stats: StatsResponse, pricing: PricingTable): FlatSessio
   return out;
 }
 
-export interface DayAgg {
-  day: string; // YYYY-MM-DD
+export interface BucketAgg {
+  key: string;    // sort key: "YYYY-MM-DD" (day) or "YYYY-MM-DDTHH" (hour, UTC)
+  label: string;  // x-axis display: "MM-DD" (day) or "MM-DD HH:00" (hour, CT)
   cost: number;
   output: number;
   sessions: number;
-  byModel: Record<string, number>; // cost
+  byModel: Record<string, number>; // cost per model
 }
 
-export function byDay(sessions: FlatSession[], pricing: PricingTable, fromDay: string | null = null): DayAgg[] {
-  const map = new Map<string, DayAgg>();
-  const dayAgg = (day: string): DayAgg => {
-    let agg = map.get(day);
+// Central-Time formatter for hourly bucket labels.
+const hourFmtCT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Chicago",
+  month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+});
+function hourLabelCT(ms: number): string {
+  const p = hourFmtCT.formatToParts(new Date(ms));
+  const get = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  return `${get("month")}-${get("day")} ${get("hour")}:00`;
+}
+
+function makeBucketer(pricing: PricingTable) {
+  const map = new Map<string, BucketAgg>();
+  const bucket = (key: string, label: string): BucketAgg => {
+    let agg = map.get(key);
     if (!agg) {
-      agg = { day, cost: 0, output: 0, sessions: 0, byModel: {} };
-      map.set(day, agg);
+      agg = { key, label, cost: 0, output: 0, sessions: 0, byModel: {} };
+      map.set(key, agg);
     }
     return agg;
   };
-  const addUsage = (day: string, models: Record<string, ModelUsage>) => {
-    const agg = dayAgg(day);
+  const addUsage = (key: string, label: string, models: Record<string, ModelUsage>) => {
+    const agg = bucket(key, label);
     for (const [m, u] of Object.entries(models)) {
       const c = usageCost(m, u, pricing);
       agg.cost += c;
@@ -221,6 +269,18 @@ export function byDay(sessions: FlatSession[], pricing: PricingTable, fromDay: s
       agg.byModel[m] = (agg.byModel[m] || 0) + c;
     }
   };
+  const result = () => [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+  return { bucket, addUsage, result };
+}
+
+/** Per-Central-Time-day cost by model, for days whose data starts on/after fromMs. */
+export function byDay(
+  sessions: FlatSession[],
+  pricing: PricingTable,
+  fromMs: number | null = null
+): BucketAgg[] {
+  const fromDay = fromMs == null ? null : dayCT(new Date(fromMs).toISOString());
+  const b = makeBucketer(pricing);
   for (const s of sessions) {
     // Attribute each day's cost to the day it actually happened, spreading a
     // multi-day session across all the days it ran instead of dumping its whole
@@ -234,26 +294,49 @@ export function byDay(sessions: FlatSession[], pricing: PricingTable, fromDay: s
       if (!ts) continue;
       const day = dayCT(ts);
       if (fromDay && day < fromDay) continue;
-      addUsage(day, allUsage(s));
-      dayAgg(day).sessions++;
+      b.addUsage(day, day.slice(5), allUsage(s));
+      b.bucket(day, day.slice(5)).sessions++;
       continue;
     }
     for (const [day, models] of Object.entries(daily)) {
       if (fromDay && day < fromDay) continue;
-      addUsage(day, models);
+      b.addUsage(day, day.slice(5), models);
     }
     for (const day of days) {
       if (fromDay && day < fromDay) continue;
-      dayAgg(day).sessions++;
+      b.bucket(day, day.slice(5)).sessions++;
     }
   }
-  return [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
+  return b.result();
 }
 
-export function costByModel(sessions: FlatSession[], pricing: PricingTable, fromDay: string | null = null) {
+/** Per-hour cost by model, for hourly buckets starting on/after fromMs. */
+export function byHour(
+  sessions: FlatSession[],
+  pricing: PricingTable,
+  fromMs: number | null = null
+): BucketAgg[] {
+  const b = makeBucketer(pricing);
+  for (const s of sessions) {
+    const last = s.lastTs ? Date.parse(s.lastTs) : NaN;
+    if (fromMs != null && !Number.isNaN(last) && last < fromMs) continue;
+    const hourly = allHourlyUsage(s);
+    for (const [hr, models] of Object.entries(hourly)) {
+      const start = hourStartMs(hr);
+      if (Number.isNaN(start)) continue;
+      if (fromMs != null && start < fromMs) continue;
+      const label = hourLabelCT(start);
+      b.addUsage(hr, label, models);
+      b.bucket(hr, label).sessions++;
+    }
+  }
+  return b.result();
+}
+
+export function costByModel(sessions: FlatSession[], pricing: PricingTable, fromMs: number | null = null) {
   const map = new Map<string, { model: string; cost: number; tokens: number; calls: number }>();
   for (const s of sessions) {
-    for (const [m, u] of Object.entries(windowedUsage(s, fromDay))) {
+    for (const [m, u] of Object.entries(windowedUsage(s, fromMs))) {
       let e = map.get(m);
       if (!e) {
         e = { model: m, cost: 0, tokens: 0, calls: 0 };
@@ -270,26 +353,26 @@ export function costByModel(sessions: FlatSession[], pricing: PricingTable, from
 export function costByProject(
   sessions: FlatSession[],
   pricing: PricingTable,
-  fromDay: string | null = null
+  fromMs: number | null = null
 ) {
   const map = new Map<string, { project: string; cost: number; sessions: number }>();
   for (const s of sessions) {
-    if (!sessionInWindow(s, fromDay)) continue;
+    if (!sessionInWindow(s, fromMs)) continue;
     let e = map.get(s.projectDisplay);
     if (!e) {
       e = { project: s.projectDisplay, cost: 0, sessions: 0 };
       map.set(s.projectDisplay, e);
     }
-    e.cost += modelsCost(windowedUsage(s, fromDay), pricing);
+    e.cost += modelsCost(windowedUsage(s, fromMs), pricing);
     e.sessions++;
   }
   return [...map.values()].sort((a, b) => b.cost - a.cost);
 }
 
-export function topTools(sessions: FlatSession[], n = 15, fromDay: string | null = null) {
+export function topTools(sessions: FlatSession[], n = 15, fromMs: number | null = null) {
   const map = new Map<string, number>();
   for (const s of sessions) {
-    if (!sessionInWindow(s, fromDay)) continue;
+    if (!sessionInWindow(s, fromMs)) continue;
     for (const [tool, c] of Object.entries(s.toolCalls))
       map.set(tool, (map.get(tool) || 0) + c);
     for (const sub of s.subagents)
