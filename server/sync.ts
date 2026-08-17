@@ -17,6 +17,12 @@ const SSH_OPTS = [
   "-o", "ConnectTimeout=8",
   "-o", "StrictHostKeyChecking=accept-new",
 ];
+if (process.env.SESSION_SSH_KEY_PATH) {
+  SSH_OPTS.push("-i", process.env.SESSION_SSH_KEY_PATH, "-o", "IdentitiesOnly=yes");
+}
+if (process.env.SESSION_SSH_KNOWN_HOSTS) {
+  SSH_OPTS.push("-o", `UserKnownHostsFile=${process.env.SESSION_SSH_KNOWN_HOSTS}`);
+}
 
 const status = new Map<string, HostSyncStatus>();
 let lastSyncStart = 0;

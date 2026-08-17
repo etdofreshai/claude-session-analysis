@@ -16,7 +16,7 @@ fi
 # after rsync succeeds. Subsequent app syncs pull new files from each live host.
 if [ -n "${ARCHIVE_BOOTSTRAP_SOURCE:-}" ] && [ ! -f /data/.archive-bootstrapped ]; then
   rsync -az --partial --timeout=60 \
-    -e 'ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new' \
+    -e 'ssh -i /data/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/data/.ssh/known_hosts' \
     "$ARCHIVE_BOOTSTRAP_SOURCE" /data/archive/
   touch /data/.archive-bootstrapped
 fi
