@@ -6,9 +6,10 @@ chmod 700 /data/.ssh
 
 # Bootstrap a dedicated deploy key into the persistent volume on first deploy.
 # The bootstrap env can be removed after the volume has been verified.
-if [ -n "${SESSION_SSH_PRIVATE_KEY_B64:-}" ] && [ ! -s /data/.ssh/id_ed25519 ]; then
-  printf '%s' "$SESSION_SSH_PRIVATE_KEY_B64" | base64 -d > /data/.ssh/id_ed25519
-  chmod 600 /data/.ssh/id_ed25519
+if [ -n "${SESSION_SSH_PRIVATE_KEY_B64:-}" ]; then
+  printf '%s' "$SESSION_SSH_PRIVATE_KEY_B64" | base64 -d > /data/.ssh/id_ed25519.new
+  chmod 600 /data/.ssh/id_ed25519.new
+  mv /data/.ssh/id_ed25519.new /data/.ssh/id_ed25519
 fi
 
 # Seed the durable Dokploy archive from the Mini's existing append-only archive
