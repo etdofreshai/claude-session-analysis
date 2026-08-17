@@ -7,7 +7,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 
-RUN mkdir -p /data/archive /data/.ssh && chmod 700 /data/.ssh
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /data/archive /data/.ssh \
+    && chmod 700 /data/.ssh
 ENV HOME=/data \
     CLAUDE_REMOTE_CACHE=/data/archive \
     CLAUDE_DISABLE_LOCAL=1
