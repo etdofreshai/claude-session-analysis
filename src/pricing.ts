@@ -17,7 +17,7 @@ export type PricingTable = Record<string, ModelPricing>;
  * unless a more specific row exists.
  */
 export const DEFAULT_PRICING: PricingTable = {
-  // Official rates from platform.claude.com/docs/en/about-claude/pricing (2026-06)
+  // Anthropic standard API rates (USD / 1M tokens, 2026-08).
   "claude-opus-4": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
   // deprecated Opus 4.1 / 4.0 kept the old tier
   "claude-opus-4-1": { input: 15, output: 75, cacheRead: 1.5, cacheWrite5m: 18.75, cacheWrite1h: 30 },
@@ -27,6 +27,12 @@ export const DEFAULT_PRICING: PricingTable = {
   "claude-sonnet-4": { input: 3, output: 15, cacheRead: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
   "claude-haiku-4": { input: 1, output: 5, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2 },
   "glm-": { input: 0.6, output: 2.2, cacheRead: 0.11, cacheWrite5m: 0, cacheWrite1h: 0 },
+  // Official OpenAI standard API rates (USD / 1M tokens, 2026-08).
+  // Keep these exact: the generic gpt- prefix below is only a legacy fallback.
+  "gpt-5.6-sol": { input: 5, output: 30, cacheRead: 0.5, cacheWrite5m: 0, cacheWrite1h: 0 },
+  "gpt-5.6-terra": { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite5m: 0, cacheWrite1h: 0 },
+  "gpt-5.6-luna": { input: 1, output: 6, cacheRead: 0.1, cacheWrite5m: 0, cacheWrite1h: 0 },
+  "gpt-5.5": { input: 5, output: 30, cacheRead: 0.5, cacheWrite5m: 0, cacheWrite1h: 0 },
   "gpt-": { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite5m: 0, cacheWrite1h: 0 },
   "codex": { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite5m: 0, cacheWrite1h: 0 },
   "gemini-": { input: 2, output: 12, cacheRead: 0.2, cacheWrite5m: 0, cacheWrite1h: 0 },

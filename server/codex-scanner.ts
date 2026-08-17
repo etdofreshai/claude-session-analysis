@@ -68,6 +68,63 @@ const TOOL_OUTPUT_TYPES = new Set([
   "tool_search_output",
 ]);
 
+/**
+ * Walk a JSONL transcript without loading its full contents into V8's heap.
+ * Some Codex rollouts are hundreds of MB; readFileSync(..., "utf8") exceeds
+ * V8's string limit for those files and silently turned them into empty
+ * dashboard sessions.
+ */
+function forEachJsonRecord(filePath: string, visit: (record: any) => void): boolean {
+  let fd: number;
+  try {
+    fd = fs.openSync(filePath, "r");
+  } catch {
+    return false;
+  }
+
+  const buffer = Buffer.allocUnsafe(256 * 1024);
+  // Hold undecoded byte chunks until a newline, then decode exactly one whole
+  // JSON record. This avoids repeated string concatenation for large embedded
+  // prompt records that cross many read buffers.
+  let pending: Buffer[] = [];
+  const consume = (line: string) => {
+    if (!line) return;
+    try {
+      visit(JSON.parse(line));
+    } catch {
+      // A partially-written or malformed JSONL line must not discard the
+      // surrounding valid transcript records.
+    }
+  };
+
+  try {
+    for (;;) {
+      const bytes = fs.readSync(fd, buffer, 0, buffer.length, null);
+      if (bytes === 0) break;
+      let start = 0;
+      let newline: number;
+      while ((newline = buffer.indexOf(0x0a, start)) >= 0 && newline < bytes) {
+        const line = buffer.subarray(start, newline);
+        if (pending.length) {
+          pending.push(Buffer.from(line));
+          consume(Buffer.concat(pending).toString("utf8"));
+          pending = [];
+        } else {
+          consume(line.toString("utf8"));
+        }
+        start = newline + 1;
+      }
+      if (start < bytes) pending.push(Buffer.from(buffer.subarray(start, bytes)));
+    }
+    if (pending.length) consume(Buffer.concat(pending).toString("utf8"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function parseCodexTranscript(filePath: string): ParsedCodex {
   const out: ParsedCodex = {
     firstTs: null,
@@ -91,25 +148,35 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
     dailyUsage: {},
   };
 
-  let text: string;
-  try {
-    text = fs.readFileSync(filePath, "utf8");
-  } catch {
-    return out;
-  }
-
   // Model/effort are set per turn via turn_context; token usage is attributed
-  // to whichever model was most recently in effect.
+  // to whichever model was most recently in effect. Some older rollouts emit
+  // token_count before their first turn_context. When the transcript declares
+  // exactly one model, it is safe to use that model for those leading records.
+  // Multi-model and declaration-free files stay explicitly "unknown".
+  const declaredModels = new Set<string>();
+  const leadingTokenUsage: Array<{ usage: any; ts?: string }> = [];
   let curModel = "unknown";
-
-  for (const line of text.split("\n")) {
-    if (!line) continue;
-    let o: any;
-    try {
-      o = JSON.parse(line);
-    } catch {
-      continue;
+  const addTokenUsage = (model: string, u: any, ts?: string) => {
+    const targets = [(out.models[model] ??= emptyUsage())];
+    if (ts) {
+      const hour = String(ts).slice(0, 13);
+      const hb = (out.hourlyUsage[hour] ??= {});
+      targets.push((hb[model] ??= emptyUsage()));
+      const day = ctDay(ts); // "2026-06-10" in Central Time
+      const db = (out.dailyUsage[day] ??= {});
+      targets.push((db[model] ??= emptyUsage()));
     }
+    const cached = u.cached_input_tokens || 0;
+    const input = (u.input_tokens || 0) - cached;
+    for (const mu of targets) {
+      mu.calls++;
+      mu.input += input > 0 ? input : 0;
+      mu.output += u.output_tokens || 0;
+      mu.cacheRead += cached;
+    }
+  };
+
+  forEachJsonRecord(filePath, (o) => {
     out.records++;
     const ts: string | undefined = o.timestamp;
     if (ts) {
@@ -123,18 +190,21 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
     if (kind === "session_meta") {
       out.cwd = p.cwd ?? out.cwd;
       out.version = p.cli_version ?? out.version;
-      out.source = p.source ?? p.originator ?? out.source;
-      continue;
+      out.source = sourceLabel(p.source) ?? sourceLabel(p.originator) ?? out.source;
+      return;
     }
 
     if (kind === "turn_context") {
-      if (p.model) curModel = p.model;
+      if (typeof p.model === "string") {
+        declaredModels.add(p.model);
+        curModel = p.model;
+      }
       const effort =
         p.collaboration_mode?.settings?.reasoning_effort ??
         p.reasoning_effort;
       if (effort && !out.effortModes.includes(effort))
         out.effortModes.push(effort);
-      continue;
+      return;
     }
 
     if (kind === "event_msg") {
@@ -159,28 +229,13 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
         case "token_count": {
           const u = p.info?.last_token_usage;
           if (u) {
-            const targets = [(out.models[curModel] ??= emptyUsage())];
-            if (ts) {
-              const hour = String(ts).slice(0, 13);
-              const hb = (out.hourlyUsage[hour] ??= {});
-              targets.push((hb[curModel] ??= emptyUsage()));
-              const day = ctDay(ts); // "2026-06-10" in Central Time
-              const db = (out.dailyUsage[day] ??= {});
-              targets.push((db[curModel] ??= emptyUsage()));
-            }
-            const cached = u.cached_input_tokens || 0;
-            const input = (u.input_tokens || 0) - cached;
-            for (const mu of targets) {
-              mu.calls++;
-              mu.input += input > 0 ? input : 0;
-              mu.output += u.output_tokens || 0;
-              mu.cacheRead += cached;
-            }
+            if (curModel === "unknown") leadingTokenUsage.push({ usage: u, ts });
+            else addTokenUsage(curModel, u, ts);
           }
           break;
         }
       }
-      continue;
+      return;
     }
 
     if (kind === "response_item") {
@@ -199,9 +254,13 @@ function parseCodexTranscript(filePath: string): ParsedCodex {
       } else if (TOOL_OUTPUT_TYPES.has(pt)) {
         out.toolResults++;
       }
-      continue;
+      return;
     }
-  }
+  });
+
+  const leadingModel = declaredModels.size === 1 ? [...declaredModels][0] : "unknown";
+  for (const { usage, ts } of leadingTokenUsage)
+    addTokenUsage(leadingModel, usage, ts);
 
   // Keep only the trailing 48h of hourly buckets (relative to last activity).
   if (out.lastTs) {
@@ -275,6 +334,21 @@ function idFromFile(file: string): string {
   const base = path.basename(file).replace(/\.jsonl$/, "");
   const m = base.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
   return m ? m[1] : base.replace(/^rollout-/, "");
+}
+
+// Codex "source" is a plain string ("vscode", "cli") in older CLIs; newer
+// CLIs emit an object for subagent-spawned threads, e.g.
+// {"subagent":{"thread_spawn":{"agent_nickname":"Sagan","agent_role":"explorer",…}}}.
+// Reduce either shape to a display string so objects never reach the UI.
+function sourceLabel(src: unknown): string | null {
+  if (typeof src === "string") return src;
+  if (src && typeof src === "object") {
+    const spawn = (src as any).subagent?.thread_spawn;
+    const name = spawn?.agent_nickname ?? spawn?.agent_role;
+    if (name) return `subagent:${name}`;
+    return Object.keys(src)[0] ?? null;
+  }
+  return null;
 }
 
 function projectNameFromCwd(cwd: string | null, id: string): string {

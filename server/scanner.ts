@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { scanCodexAll, codexSessionDetail } from "./codex-scanner";
+import { scanPiAll, piSessionDetail } from "./pi-scanner";
+import { scanOpenCodeAll, opencodeSessionDetail } from "./opencode-scanner";
 import { hosts, hostById, type HostSpec } from "./hosts";
 import { ensureSynced } from "./sync";
 import { ctDay } from "./ct-day";
@@ -392,6 +394,16 @@ export function scanAll(): StatsResponse {
     } catch {
       // codex dir missing or unreadable — skip
     }
+    try {
+      projects.push(...scanPiAll(host.piDir, host.label));
+    } catch {
+      // pi dir missing or unreadable — skip
+    }
+    try {
+      projects.push(...scanOpenCodeAll(host.opencodeDb, host.label));
+    } catch {
+      // opencode db missing, changing during sync, or unreadable — skip
+    }
   }
   return {
     generatedAt: new Date().toISOString(),
@@ -498,6 +510,8 @@ export function sessionDetail(
 ): SessionDetail | null {
   const host = hostById(hostId ?? "local") ?? hosts()[0];
   if (source === "codex") return codexSessionDetail(sessionId, host.codexDir, host.label);
+  if (source === "pi") return piSessionDetail(sessionId, host.piDir, host.label);
+  if (source === "opencode") return opencodeSessionDetail(sessionId, host.opencodeDb, host.label);
   const root = host.projectsDir;
   const projDir = path.join(root, projName);
   const fp = path.join(projDir, sessionId + ".jsonl");

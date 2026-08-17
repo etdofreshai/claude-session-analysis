@@ -68,7 +68,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>
-          Claude Session Analysis
+          AI Session Analysis
           {stats && (
             <span className="sub">
               {sessions.length} sessions · {stats.projects.length} projects ·

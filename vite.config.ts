@@ -6,5 +6,9 @@ export default defineConfig({
   plugins: [react(), sessionApiPlugin()],
   server: {
     port: 5180,
+    allowedHosts: (process.env.ALLOWED_HOSTS ?? "etzmacminim2.lan")
+      .split(",")
+      .map((host) => host.trim())
+      .filter(Boolean),
   },
 });

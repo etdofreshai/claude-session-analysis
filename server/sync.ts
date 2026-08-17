@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { promisify } from "node:util";
 import type { HostSyncStatus } from "../src/types";
 import { hosts, type HostSpec } from "./hosts";
@@ -24,10 +25,11 @@ let inFlight: Promise<void> | null = null;
 async function rsyncPull(
   h: HostSpec,
   src: string,
-  dest: string
+  dest: string,
+  filters: string[] = []
 ): Promise<void> {
   fs.mkdirSync(dest, { recursive: true });
-  const args = ["-az", "--timeout=25"];
+  const args = ["-az", "--timeout=25", ...filters];
   // SSH transport only for remote hosts; the local host rsyncs filesystem→
   // filesystem with no -e and a bare (non-prefixed) source path.
   if (h.ssh) args.push("-e", `ssh ${SSH_OPTS.join(" ")}`);
@@ -44,21 +46,48 @@ async function rsyncPull(
 }
 
 async function syncHost(h: HostSpec): Promise<void> {
-  if (!h.remoteProjects) return;
+  if (!h.remoteProjects && !h.remoteCodex && !h.remotePi && !h.remoteOpenCode) return;
   const t0 = Date.now();
   let ok = true;
   let error: string | null = null;
-  try {
-    // projects is required; codex is best-effort (the dir may not exist).
-    await rsyncPull(h, h.remoteProjects, h.projectsDir);
+  // Claude remains the required/health-signalling source for existing host
+  // status, but a failure there must not prevent Pi/OpenCode-only hosts from
+  // syncing their available stores.
+  if (h.remoteProjects) {
+    try {
+      await rsyncPull(h, h.remoteProjects, h.projectsDir);
+    } catch (e: any) {
+      ok = false;
+      error = String(e?.stderr || e?.message || e).trim().slice(0, 500);
+    }
+  }
+  if (h.remoteCodex) {
     try {
       await rsyncPull(h, h.remoteCodex, h.codexDir);
     } catch {
       /* no codex on this host — ignore */
     }
-  } catch (e: any) {
-    ok = false;
-    error = String(e?.stderr || e?.message || e).trim().slice(0, 500);
+  }
+  if (h.remotePi) {
+    try {
+      await rsyncPull(h, h.remotePi, h.piDir);
+    } catch {
+      /* no pi on this host — ignore */
+    }
+  }
+  if (h.remoteOpenCode) {
+    try {
+      // OpenCode stores sessions in SQLite. Copy only the database and WAL
+      // companions, not the often-huge snapshot and tool-output directories.
+      await rsyncPull(h, h.remoteOpenCode, path.dirname(h.opencodeDb), [
+        "--include=opencode.db",
+        "--include=opencode.db-wal",
+        "--include=opencode.db-shm",
+        "--exclude=*",
+      ]);
+    } catch {
+      /* no opencode on this host — ignore */
+    }
   }
   status.set(h.id, {
     id: h.id,
@@ -72,7 +101,9 @@ async function syncHost(h: HostSpec): Promise<void> {
 }
 
 async function doSync(): Promise<void> {
-  const remotes = hosts().filter((h) => h.remoteProjects);
+  const remotes = hosts().filter(
+    (h) => h.remoteProjects || h.remoteCodex || h.remotePi || h.remoteOpenCode
+  );
   await Promise.all(remotes.map((h) => syncHost(h)));
 }
 
@@ -99,7 +130,7 @@ export function statusList(): HostSyncStatus[] {
     // Hosts with no rsync source (pure scan-in-place) have no sync status; they
     // always count as ok and are listed only so they appear in the dashboard's
     // host bar.
-    if (!h.remoteProjects) {
+    if (!h.remoteProjects && !h.remoteCodex && !h.remotePi && !h.remoteOpenCode) {
       return {
         id: h.id,
         label: h.label,

@@ -86,6 +86,12 @@ export default function Overview({
   );
   // Thin x-axis ticks when there are many buckets (e.g. up to 168 hourly bars).
   const tickInterval = chartData.length > 24 ? Math.ceil(chartData.length / 16) : 0;
+  // A week is readable horizontally. Longer daily ranges need rotation so the
+  // month/year labels remain legible instead of colliding or being mistaken
+  // for hourly timestamps.
+  const rotateDailyLabels = gran === "day" && dayRange !== "1w";
+  const xAxisAngle = gran === "hour" || rotateDailyLabels ? -35 : 0;
+  const xAxisHeight = xAxisAngle === 0 ? 30 : 64;
 
   return (
     <div className="page">
@@ -132,9 +138,9 @@ export default function Overview({
               stroke="#888"
               fontSize={11}
               interval={tickInterval}
-              angle={gran === "hour" ? -35 : 0}
-              textAnchor={gran === "hour" ? "end" : "middle"}
-              height={gran === "hour" ? 64 : 30}
+              angle={xAxisAngle}
+              textAnchor={xAxisAngle === 0 ? "middle" : "end"}
+              height={xAxisHeight}
             />
             <YAxis stroke="#888" fontSize={11} tickFormatter={(v) => "$" + v} />
             <Tooltip

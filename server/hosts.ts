@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 
-// A "host" is a machine whose Claude/Codex transcripts we scan. The local
+// A "host" is a machine whose AI-agent transcripts we scan. The local
 // machine is always included; remote machines are pulled into a staging dir
 // via rsync (see sync.ts) and then scanned from that local copy.
 export interface HostSpec {
@@ -13,6 +13,10 @@ export interface HostSpec {
   projectsDir: string;
   /** Local path to the Codex sessions dir to scan. */
   codexDir: string;
+  /** Local path to the Pi agent sessions dir to scan. */
+  piDir: string;
+  /** Local path to the OpenCode SQLite database to scan. */
+  opencodeDb: string;
   /**
    * rsync SOURCE for Claude projects. For SSH remotes this is an SSH-side,
    * home-relative path (e.g. ".claude/projects/"); for the local host it is an
@@ -23,6 +27,10 @@ export interface HostSpec {
   remoteProjects: string;
   /** rsync SOURCE for Codex sessions; same conventions as remoteProjects. */
   remoteCodex: string;
+  /** rsync SOURCE for Pi sessions; same conventions as remoteProjects. */
+  remotePi: string;
+  /** rsync SOURCE directory containing opencode.db and its WAL files. */
+  remoteOpenCode: string;
   /**
    * --rsync-path override: the command to run on the remote to invoke rsync.
    * Used for Windows hosts that have no native rsync but can reach one through
@@ -44,6 +52,8 @@ interface RemoteDef {
   ssh: string;
   remoteProjects?: string;
   remoteCodex?: string;
+  remotePi?: string;
+  remoteOpenCode?: string;
   rsyncPath?: string;
 }
 
@@ -79,7 +89,10 @@ export function hosts(): HostSpec[] {
 
   const localLabel = process.env.CLAUDE_LOCAL_LABEL ?? "etzmacminim2";
   const localStage = path.join(remoteStageRoot(), localLabel);
-  list.push({
+  // A containerized deployment has no meaningful local archive. In that mode
+  // every source host is declared through CLAUDE_REMOTE_HOSTS and staged in the
+  // persistent cache volume.
+  if (process.env.CLAUDE_DISABLE_LOCAL !== "1") list.push({
     id: "local",
     label: localLabel,
     ssh: null,
@@ -88,6 +101,8 @@ export function hosts(): HostSpec[] {
     // only — no --delete).
     projectsDir: path.join(localStage, "projects"),
     codexDir: path.join(localStage, "codex"),
+    piDir: path.join(localStage, "pi"),
+    opencodeDb: path.join(localStage, "opencode", "opencode.db"),
     // COPY SOURCE for the local self-archive rsync: the LIVE dirs. Absolute
     // paths, trailing slash mandatory (copies contents into the stage dir).
     // The CLAUDE_PROJECTS_DIR / CODEX_SESSIONS_DIR env overrides now select the
@@ -98,6 +113,12 @@ export function hosts(): HostSpec[] {
     remoteCodex:
       (process.env.CODEX_SESSIONS_DIR ??
         path.join(os.homedir(), ".codex", "sessions")) + "/",
+    remotePi:
+      (process.env.PI_SESSIONS_DIR ??
+        path.join(os.homedir(), ".pi", "agent", "sessions")) + "/",
+    remoteOpenCode:
+      (process.env.OPENCODE_DATA_DIR ??
+        path.join(os.homedir(), ".local", "share", "opencode")) + "/",
     rsyncPath: null,
   });
 
@@ -109,8 +130,12 @@ export function hosts(): HostSpec[] {
       ssh: r.ssh,
       projectsDir: path.join(base, "projects"),
       codexDir: path.join(base, "codex"),
+      piDir: path.join(base, "pi"),
+      opencodeDb: path.join(base, "opencode", "opencode.db"),
       remoteProjects: r.remoteProjects ?? ".claude/projects/",
       remoteCodex: r.remoteCodex ?? ".codex/sessions/",
+      remotePi: r.remotePi ?? ".pi/agent/sessions/",
+      remoteOpenCode: r.remoteOpenCode ?? ".local/share/opencode/",
       rsyncPath: r.rsyncPath ?? null,
     });
   }

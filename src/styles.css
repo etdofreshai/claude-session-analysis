@@ -136,10 +136,28 @@ table.sessions tbody tr:hover { background: #20242c; }
 .chip-src { text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.04em; }
 .chip-claude { background: #2a221c; color: #e8a16a; }
 .chip-codex { background: #1c2a25; color: #5ee8b0; }
+.chip-pi { background: #2b2336; color: #c7a7ff; }
+.chip-opencode { background: #2d2a1d; color: #ffd166; }
 .chip-host { background: #1f2433; color: #82cfff; }
 
 .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .filters input { min-width: 280px; }
+
+/* Column picker: panel must sit above the sticky table headers (z-index) and
+   is not clipped since .filters lives above .table-scroll. */
+.columns-picker { position: relative; display: inline-flex; }
+.columns-panel {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px; min-width: 180px; display: flex; flex-direction: column; gap: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.columns-panel label {
+  display: flex; align-items: center; gap: 6px; font-size: 12px;
+  color: var(--text); cursor: pointer; white-space: nowrap;
+}
+/* Checkboxes must escape the .filters input { min-width: 280px } rule. */
+.columns-panel input { min-width: 0; }
 
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);

@@ -17,6 +17,10 @@ export function sessionApiPlugin(): Plugin {
         const url = new URL(req.url ?? "/", "http://localhost");
         (async () => {
           try {
+            if (url.pathname === "/healthz") {
+              sendJson(res, 200, { status: "ok" });
+              return;
+            }
             if (url.pathname === "/api/stats") {
               sendJson(res, 200, await scanAll());
               return;

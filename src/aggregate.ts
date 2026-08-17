@@ -38,6 +38,13 @@ export interface FlatSession extends SessionStats {
   costLastHour: number;
 }
 
+/** Stable identity for a session across hosts and agent data sources. */
+export function sessionIdentity(
+  session: Pick<SessionStats, "host" | "source" | "project" | "id">
+): string {
+  return [session.host, session.source, session.project, session.id].join("\u0000");
+}
+
 /**
  * Cost of hourly buckets intersecting [now - windowMs, now]. Buckets that
  * partially overlap the window are weighted by overlap fraction (activity
@@ -394,6 +401,7 @@ export const MODEL_COLORS: Record<string, string> = {
   "claude-sonnet-4-5": "#3a8ad4",
   "claude-haiku-4-5": "#4ae8b0",
   "glm-5.1": "#e8d44a",
+  "gpt-5.6-sol": "#ffd166",
   "gpt-5.5": "#5ee84a",
   "<synthetic>": "#777",
 };

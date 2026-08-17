@@ -1,21 +1,29 @@
-# Claude Session Analysis
+# AI Session Analysis
 
-A local Vite + React dashboard that analyzes your Claude Code session transcripts
-(`~/.claude/projects/**/*.jsonl`): models used, estimated cost, message counts,
-tool usage, subagent activity, and per-session drill-downs.
+A local Vite + React dashboard that analyzes sessions from Claude Code, Codex,
+Pi, and OpenCode: models used, estimated cost, message counts, tool usage,
+subagent activity, and per-session drill-downs.
+
+The default local stores are:
+
+- Claude Code: `~/.claude/projects/**/*.jsonl`
+- Codex: `~/.codex/sessions/**/*.jsonl`
+- Pi: `~/.pi/agent/sessions/**/*.jsonl`
+- OpenCode: `~/.local/share/opencode/opencode.db`
 
 ## How it works
 
-The Vite dev server includes a middleware plugin (`server/api.ts`) that scans the
-projects directory **server-side** (the data is hundreds of MB — it never ships
-raw to the browser). Parsed per-session stats are cached by file mtime, so the
-first scan is the slow one and refreshes are cheap.
+The Vite dev server includes a middleware plugin (`server/api.ts`) that scans
+these stores **server-side** (the data can be hundreds of MB — transcripts and
+databases never ship raw to the browser). Parsed per-session stats are cached by
+file/database modification state, so the first scan is the slow one and
+refreshes are cheap.
 
 - `GET /api/stats` — aggregated stats for every session in every project
 - `GET /api/session?project=&id=` — full drill-down with an event timeline
 
-Subagent transcripts (`<project>/<session-id>/subagents/agent-*.jsonl`) are
-parsed and attributed to their parent session.
+Claude subagent transcripts and OpenCode child sessions are parsed and
+attributed to their parent session.
 
 Token usage is deduplicated by API message id (streamed messages repeat the
 usage block across multiple JSONL records).
@@ -39,7 +47,27 @@ npm install
 npm run dev    # http://localhost:5180
 ```
 
-Set `CLAUDE_PROJECTS_DIR` to point somewhere other than `~/.claude/projects`.
+Override nonstandard local stores with `CLAUDE_PROJECTS_DIR`,
+`CODEX_SESSIONS_DIR`, `PI_SESSIONS_DIR`, or `OPENCODE_DATA_DIR`.
+
+Configured remote hosts are synced into `~/.claude-remotes` too. OpenCode sync
+copies only `opencode.db` and its WAL companions, deliberately excluding its
+large snapshot and tool-output directories.
+
+## Dokploy/container deployment
+
+The included Dockerfile runs the same Vite API/UI server on port 5180. Set
+`CLAUDE_REMOTE_HOSTS` to the three SSH source hosts and mount the declared
+`/data` volume so the append-only staging archive and dedicated SSH key survive
+redeploys. `CLAUDE_DISABLE_LOCAL=1` (the image default) prevents a phantom
+container-local host from appearing in the dashboard. `/healthz` is a
+non-scanning liveness endpoint.
+
+For a migration, `ARCHIVE_BOOTSTRAP_SOURCE` can point to the existing Mini
+archive (with a trailing slash). The entrypoint rsyncs it once into the volume,
+writes `/data/.archive-bootstrapped` only after success, and then switches to
+normal incremental per-host pulls. Remove the bootstrap key environment value
+after the persistent volume has been verified.
 
 ## Notes
 
