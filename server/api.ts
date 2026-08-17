@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { timingSafeEqual } from "node:crypto";
 import { scanAll, sessionDetail } from "./scanner";
 
 function sendJson(res: any, status: number, body: unknown) {
@@ -20,6 +21,27 @@ export function sessionApiPlugin(): Plugin {
             if (url.pathname === "/healthz") {
               sendJson(res, 200, { status: "ok" });
               return;
+            }
+            const expected = process.env.DASHBOARD_BASIC_AUTH;
+            if (expected) {
+              const header = String(req.headers.authorization ?? "");
+              let supplied = "";
+              if (header.startsWith("Basic ")) {
+                try {
+                  supplied = Buffer.from(header.slice(6), "base64").toString("utf8");
+                } catch {
+                  supplied = "";
+                }
+              }
+              const a = Buffer.from(supplied);
+              const b = Buffer.from(expected);
+              if (a.length !== b.length || !timingSafeEqual(a, b)) {
+                res.statusCode = 401;
+                res.setHeader("WWW-Authenticate", 'Basic realm="AI Session Analysis"');
+                res.setHeader("Cache-Control", "no-store");
+                res.end("Authentication required");
+                return;
+              }
             }
             if (url.pathname === "/api/stats") {
               sendJson(res, 200, await scanAll());
