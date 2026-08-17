@@ -63,9 +63,12 @@ redeploys. `CLAUDE_DISABLE_LOCAL=1` (the image default) prevents a phantom
 container-local host from appearing in the dashboard. `/healthz` is a
 non-scanning liveness endpoint.
 
-Set `DASHBOARD_BASIC_AUTH` to a `username:password` pair when the service is
-routed through a public hostname. The health endpoint remains unauthenticated;
-all UI assets and session APIs require HTTP Basic authentication.
+Set `DASHBOARD_PASSWORD` and a high-entropy `DASHBOARD_SESSION_SECRET` when the
+service is routed through a public hostname. Unauthenticated browser requests
+receive an unlock screen; successful entry creates a Secure, HttpOnly,
+SameSite session cookie. The health endpoint remains unauthenticated, while all
+UI assets and session APIs require the session. `DASHBOARD_BASIC_AUTH` remains
+as a deployment-compatibility fallback only when `DASHBOARD_PASSWORD` is unset.
 
 For a migration, `ARCHIVE_BOOTSTRAP_SOURCE` can point to the existing Mini
 archive (with a trailing slash). The entrypoint rsyncs it once into the volume,
