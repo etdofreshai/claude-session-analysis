@@ -14,7 +14,7 @@ const TTL_MS = Number(process.env.CLAUDE_SYNC_TTL_MS ?? 90_000);
 
 const SSH_OPTS = [
   "-o", "BatchMode=yes",
-  "-o", "ConnectTimeout=8",
+  "-o", `ConnectTimeout=${process.env.SESSION_SSH_CONNECT_TIMEOUT ?? "20"}`,
   "-o", "StrictHostKeyChecking=accept-new",
 ];
 if (process.env.SESSION_SSH_KEY_PATH) {
