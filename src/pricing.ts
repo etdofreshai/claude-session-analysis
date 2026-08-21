@@ -70,15 +70,26 @@ export function pricingFor(model: string, table: PricingTable): ModelPricing {
 }
 
 export function usageCost(model: string, u: ModelUsage, table: PricingTable): number {
+  const parts = usageCostParts(model, u, table);
+  return parts.input + parts.output;
+}
+
+/** Cost split used by charts: cache traffic belongs to the input side. */
+export function usageCostParts(
+  model: string,
+  u: ModelUsage,
+  table: PricingTable
+): { input: number; output: number } {
   const p = pricingFor(model, table);
-  return (
-    (u.input * p.input +
-      u.output * p.output +
-      u.cacheRead * p.cacheRead +
-      u.cacheWrite5m * p.cacheWrite5m +
-      u.cacheWrite1h * p.cacheWrite1h) /
-    1_000_000
-  );
+  return {
+    input:
+      (u.input * p.input +
+        u.cacheRead * p.cacheRead +
+        u.cacheWrite5m * p.cacheWrite5m +
+        u.cacheWrite1h * p.cacheWrite1h) /
+      1_000_000,
+    output: (u.output * p.output) / 1_000_000,
+  };
 }
 
 export function modelsCost(

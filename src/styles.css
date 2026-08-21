@@ -114,6 +114,24 @@ table.sessions tbody tr:hover { background: #20242c; }
   margin-right: 6px; vertical-align: middle; flex: none;
 }
 
+.model-shade-swatch {
+  display: inline-flex; width: 12px; height: 9px; overflow: hidden;
+  border-radius: 2px; margin-right: 6px; vertical-align: middle;
+}
+.model-shade-swatch > span { flex: 1; }
+
+.shade-legend {
+  display: flex; align-items: center; gap: 14px; margin: -5px 0 8px;
+  color: var(--muted); font-size: 11px;
+}
+.shade-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.shade-key {
+  display: inline-block; width: 10px; height: 8px; border-radius: 2px;
+  background: #4a5364;
+}
+.shade-key-input { filter: brightness(0.7); }
+.shade-key-output { filter: brightness(1.65); }
+
 .chart-tooltip {
   background: #1c1f26; border: 1px solid #333; border-radius: 6px;
   padding: 8px 10px; font-size: 12px; max-width: 280px;

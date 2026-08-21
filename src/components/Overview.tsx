@@ -47,6 +47,14 @@ export default function Overview({
 
   // Only models that actually cost something feed the donut.
   const pieModels = useMemo(() => models.filter((m) => m.cost > 0), [models]);
+  const pieSegments = useMemo(
+    () =>
+      pieModels.flatMap((m) => [
+        { key: `${m.model}:input`, model: m.model, kind: "Input + cache", cost: m.inputCost },
+        { key: `${m.model}:output`, model: m.model, kind: "Output", cost: m.outputCost },
+      ]).filter((part) => part.cost > 0),
+    [pieModels]
+  );
 
   // Cost/token totals + message counts scoped to the selected window.
   const totals = useMemo(() => windowTotals(sessions, pricing, fromMs), [sessions, pricing, fromMs]);
@@ -80,7 +88,12 @@ export default function Overview({
     () =>
       buckets.map((d) => ({
         label: d.label,
-        ...Object.fromEntries(modelNames.map((m) => [m, +(d.byModel[m] ?? 0).toFixed(2)])),
+        ...Object.fromEntries(
+          modelNames.flatMap((m) => [
+            [`${m}:input`, +(d.byModel[m]?.input ?? 0).toFixed(4)],
+            [`${m}:output`, +(d.byModel[m]?.output ?? 0).toFixed(4)],
+          ])
+        ),
       })),
     [buckets, modelNames]
   );
@@ -130,6 +143,7 @@ export default function Overview({
 
       <div className="panel">
         <h2>Estimated cost per {gran === "hour" ? "hour" : "day"} (by model){suffix}</h2>
+        <ShadeLegend />
         <ResponsiveContainer width="100%" height={gran === "hour" ? 310 : 280}>
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -147,9 +161,22 @@ export default function Overview({
               content={<BucketTooltip />}
               cursor={{ fill: "rgba(255,255,255,0.04)" }}
             />
-            {modelNames.map((m) => (
-              <Bar key={m} dataKey={m} stackId="cost" fill={colorOf[m]} />
-            ))}
+            {modelNames.flatMap((m) => [
+              <Bar
+                key={`${m}:input`}
+                dataKey={`${m}:input`}
+                name={`${m} · Input + cache`}
+                stackId="cost"
+                fill={tokenShade(colorOf[m], "input")}
+              />,
+              <Bar
+                key={`${m}:output`}
+                dataKey={`${m}:output`}
+                name={`${m} · Output`}
+                stackId="cost"
+                fill={tokenShade(colorOf[m], "output")}
+              />,
+            ])}
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -157,23 +184,30 @@ export default function Overview({
       <div className="panel-row">
         <div className="panel half">
           <h2>Cost by model{suffix}</h2>
+          <ShadeLegend />
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie
-                data={pieModels}
+                data={pieSegments}
                 dataKey="cost"
-                nameKey="model"
+                nameKey="key"
                 innerRadius={55}
                 outerRadius={95}
                 paddingAngle={2}
               >
-                {pieModels.map((m) => (
-                  <Cell key={m.model} fill={colorOf[m.model]} />
+                {pieSegments.map((part) => (
+                  <Cell
+                    key={part.key}
+                    fill={tokenShade(colorOf[part.model], part.kind === "Output" ? "output" : "input")}
+                  />
                 ))}
               </Pie>
               <Tooltip
                 contentStyle={{ background: "#1c1f26", border: "1px solid #333" }}
-                formatter={(v: any) => fmtUsd(Number(v))}
+                formatter={(v: any, _name: any, item: any) => [
+                  fmtUsd(Number(v)),
+                  `${item.payload.model} · ${item.payload.kind}`,
+                ]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -185,10 +219,7 @@ export default function Overview({
               {models.map((m) => (
                 <tr key={m.model}>
                   <td>
-                    <span
-                      className="legend-swatch"
-                      style={{ background: colorOf[m.model] }}
-                    />
+                    <ModelShadeSwatch color={colorOf[m.model]} />
                     {m.model}
                   </td>
                   <td>{m.calls.toLocaleString()}</td>
@@ -262,6 +293,39 @@ function BucketTooltip({ active, payload, label }: any) {
           <span className="tt-val">{fmtUsd(total)}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function mixHex(color: string, target: "#000000" | "#ffffff", amount: number): string {
+  const value = color.replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(value)) return color;
+  const to = target === "#ffffff" ? 255 : 0;
+  const channels = [0, 2, 4].map((offset) => {
+    const from = Number.parseInt(value.slice(offset, offset + 2), 16);
+    return Math.round(from + (to - from) * amount).toString(16).padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+function tokenShade(color: string, kind: "input" | "output"): string {
+  return kind === "input" ? mixHex(color, "#000000", 0.28) : mixHex(color, "#ffffff", 0.28);
+}
+
+function ModelShadeSwatch({ color }: { color: string }) {
+  return (
+    <span className="model-shade-swatch" aria-hidden="true">
+      <span style={{ background: tokenShade(color, "input") }} />
+      <span style={{ background: tokenShade(color, "output") }} />
+    </span>
+  );
+}
+
+function ShadeLegend() {
+  return (
+    <div className="shade-legend" aria-label="Token cost shade legend">
+      <span><span className="shade-key shade-key-input" />Input + cache</span>
+      <span><span className="shade-key shade-key-output" />Output</span>
     </div>
   );
 }

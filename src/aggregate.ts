@@ -1,6 +1,6 @@
 import type { HourlyUsage, ModelUsage, SessionStats, StatsResponse } from "./types";
 import type { PricingTable } from "./pricing";
-import { dayCT, modelsCost, usageCost } from "./pricing";
+import { dayCT, modelsCost, usageCost, usageCostParts } from "./pricing";
 
 export type RangeKey = "1w" | "1m" | "3m" | "6m" | "1y" | "all";
 export type HourRangeKey = "6h" | "12h" | "24h" | "48h" | "120h" | "168h";
@@ -243,7 +243,7 @@ export interface BucketAgg {
   cost: number;
   output: number;
   sessions: number;
-  byModel: Record<string, number>; // cost per model
+  byModel: Record<string, { input: number; output: number }>;
 }
 
 // Central-Time formatter for hourly bucket labels.
@@ -270,10 +270,13 @@ function makeBucketer(pricing: PricingTable) {
   const addUsage = (key: string, label: string, models: Record<string, ModelUsage>) => {
     const agg = bucket(key, label);
     for (const [m, u] of Object.entries(models)) {
-      const c = usageCost(m, u, pricing);
+      const parts = usageCostParts(m, u, pricing);
+      const c = parts.input + parts.output;
       agg.cost += c;
       agg.output += u.output;
-      agg.byModel[m] = (agg.byModel[m] || 0) + c;
+      const model = (agg.byModel[m] ??= { input: 0, output: 0 });
+      model.input += parts.input;
+      model.output += parts.output;
     }
   };
   const result = () => [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
@@ -341,15 +344,25 @@ export function byHour(
 }
 
 export function costByModel(sessions: FlatSession[], pricing: PricingTable, fromMs: number | null = null) {
-  const map = new Map<string, { model: string; cost: number; tokens: number; calls: number }>();
+  const map = new Map<string, {
+    model: string;
+    cost: number;
+    inputCost: number;
+    outputCost: number;
+    tokens: number;
+    calls: number;
+  }>();
   for (const s of sessions) {
     for (const [m, u] of Object.entries(windowedUsage(s, fromMs))) {
       let e = map.get(m);
       if (!e) {
-        e = { model: m, cost: 0, tokens: 0, calls: 0 };
+        e = { model: m, cost: 0, inputCost: 0, outputCost: 0, tokens: 0, calls: 0 };
         map.set(m, e);
       }
-      e.cost += usageCost(m, u, pricing);
+      const parts = usageCostParts(m, u, pricing);
+      e.inputCost += parts.input;
+      e.outputCost += parts.output;
+      e.cost += parts.input + parts.output;
       e.tokens += u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
       e.calls += u.calls;
     }
