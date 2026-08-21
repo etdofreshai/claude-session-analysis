@@ -50,8 +50,9 @@ export default function Overview({
   const pieSegments = useMemo(
     () =>
       pieModels.flatMap((m) => [
-        { key: `${m.model}:input`, model: m.model, kind: "Input + cache", cost: m.inputCost },
-        { key: `${m.model}:output`, model: m.model, kind: "Output", cost: m.outputCost },
+        { key: `${m.model}:cache`, model: m.model, kind: "Cached input" as const, cost: m.cacheCost },
+        { key: `${m.model}:input`, model: m.model, kind: "Input" as const, cost: m.inputCost },
+        { key: `${m.model}:output`, model: m.model, kind: "Output" as const, cost: m.outputCost },
       ]).filter((part) => part.cost > 0),
     [pieModels]
   );
@@ -90,6 +91,7 @@ export default function Overview({
         label: d.label,
         ...Object.fromEntries(
           modelNames.flatMap((m) => [
+            [`${m}:cache`, +(d.byModel[m]?.cache ?? 0).toFixed(4)],
             [`${m}:input`, +(d.byModel[m]?.input ?? 0).toFixed(4)],
             [`${m}:output`, +(d.byModel[m]?.output ?? 0).toFixed(4)],
           ])
@@ -163,9 +165,16 @@ export default function Overview({
             />
             {modelNames.flatMap((m) => [
               <Bar
+                key={`${m}:cache`}
+                dataKey={`${m}:cache`}
+                name={`${m} · Cached input`}
+                stackId="cost"
+                fill={tokenShade(colorOf[m], "cache")}
+              />,
+              <Bar
                 key={`${m}:input`}
                 dataKey={`${m}:input`}
-                name={`${m} · Input + cache`}
+                name={`${m} · Input`}
                 stackId="cost"
                 fill={tokenShade(colorOf[m], "input")}
               />,
@@ -198,7 +207,10 @@ export default function Overview({
                 {pieSegments.map((part) => (
                   <Cell
                     key={part.key}
-                    fill={tokenShade(colorOf[part.model], part.kind === "Output" ? "output" : "input")}
+                    fill={tokenShade(
+                      colorOf[part.model],
+                      part.kind === "Cached input" ? "cache" : part.kind.toLowerCase() as "input" | "output"
+                    )}
                   />
                 ))}
               </Pie>
@@ -308,13 +320,18 @@ function mixHex(color: string, target: "#000000" | "#ffffff", amount: number): s
   return `#${channels.join("")}`;
 }
 
-function tokenShade(color: string, kind: "input" | "output"): string {
-  return kind === "input" ? mixHex(color, "#000000", 0.28) : mixHex(color, "#ffffff", 0.28);
+type TokenShadeKind = "cache" | "input" | "output";
+
+function tokenShade(color: string, kind: TokenShadeKind): string {
+  if (kind === "cache") return mixHex(color, "#000000", 0.38);
+  if (kind === "output") return mixHex(color, "#ffffff", 0.34);
+  return color;
 }
 
 function ModelShadeSwatch({ color }: { color: string }) {
   return (
     <span className="model-shade-swatch" aria-hidden="true">
+      <span style={{ background: tokenShade(color, "cache") }} />
       <span style={{ background: tokenShade(color, "input") }} />
       <span style={{ background: tokenShade(color, "output") }} />
     </span>
@@ -324,7 +341,8 @@ function ModelShadeSwatch({ color }: { color: string }) {
 function ShadeLegend() {
   return (
     <div className="shade-legend" aria-label="Token cost shade legend">
-      <span><span className="shade-key shade-key-input" />Input + cache</span>
+      <span><span className="shade-key shade-key-cache" />Cached input</span>
+      <span><span className="shade-key shade-key-input" />Input</span>
       <span><span className="shade-key shade-key-output" />Output</span>
     </div>
   );

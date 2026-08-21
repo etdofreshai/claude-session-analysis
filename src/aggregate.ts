@@ -243,7 +243,7 @@ export interface BucketAgg {
   cost: number;
   output: number;
   sessions: number;
-  byModel: Record<string, { input: number; output: number }>;
+  byModel: Record<string, { cache: number; input: number; output: number }>;
 }
 
 // Central-Time formatter for hourly bucket labels.
@@ -271,10 +271,11 @@ function makeBucketer(pricing: PricingTable) {
     const agg = bucket(key, label);
     for (const [m, u] of Object.entries(models)) {
       const parts = usageCostParts(m, u, pricing);
-      const c = parts.input + parts.output;
+      const c = parts.cache + parts.input + parts.output;
       agg.cost += c;
       agg.output += u.output;
-      const model = (agg.byModel[m] ??= { input: 0, output: 0 });
+      const model = (agg.byModel[m] ??= { cache: 0, input: 0, output: 0 });
+      model.cache += parts.cache;
       model.input += parts.input;
       model.output += parts.output;
     }
@@ -347,6 +348,7 @@ export function costByModel(sessions: FlatSession[], pricing: PricingTable, from
   const map = new Map<string, {
     model: string;
     cost: number;
+    cacheCost: number;
     inputCost: number;
     outputCost: number;
     tokens: number;
@@ -356,13 +358,17 @@ export function costByModel(sessions: FlatSession[], pricing: PricingTable, from
     for (const [m, u] of Object.entries(windowedUsage(s, fromMs))) {
       let e = map.get(m);
       if (!e) {
-        e = { model: m, cost: 0, inputCost: 0, outputCost: 0, tokens: 0, calls: 0 };
+        e = {
+          model: m, cost: 0, cacheCost: 0, inputCost: 0,
+          outputCost: 0, tokens: 0, calls: 0,
+        };
         map.set(m, e);
       }
       const parts = usageCostParts(m, u, pricing);
+      e.cacheCost += parts.cache;
       e.inputCost += parts.input;
       e.outputCost += parts.output;
-      e.cost += parts.input + parts.output;
+      e.cost += parts.cache + parts.input + parts.output;
       e.tokens += u.input + u.output + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
       e.calls += u.calls;
     }

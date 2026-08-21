@@ -71,23 +71,23 @@ export function pricingFor(model: string, table: PricingTable): ModelPricing {
 
 export function usageCost(model: string, u: ModelUsage, table: PricingTable): number {
   const parts = usageCostParts(model, u, table);
-  return parts.input + parts.output;
+  return parts.cache + parts.input + parts.output;
 }
 
-/** Cost split used by charts: cache traffic belongs to the input side. */
+/** Cost split used by charts to give cache, fresh input, and output distinct shades. */
 export function usageCostParts(
   model: string,
   u: ModelUsage,
   table: PricingTable
-): { input: number; output: number } {
+): { cache: number; input: number; output: number } {
   const p = pricingFor(model, table);
   return {
-    input:
-      (u.input * p.input +
-        u.cacheRead * p.cacheRead +
+    cache:
+      (u.cacheRead * p.cacheRead +
         u.cacheWrite5m * p.cacheWrite5m +
         u.cacheWrite1h * p.cacheWrite1h) /
       1_000_000,
+    input: (u.input * p.input) / 1_000_000,
     output: (u.output * p.output) / 1_000_000,
   };
 }

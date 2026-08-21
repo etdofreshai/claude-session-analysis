@@ -129,7 +129,8 @@ table.sessions tbody tr:hover { background: #20242c; }
   display: inline-block; width: 10px; height: 8px; border-radius: 2px;
   background: #4a5364;
 }
-.shade-key-input { filter: brightness(0.7); }
+.shade-key-cache { filter: brightness(0.58); }
+.shade-key-input { filter: brightness(1); }
 .shade-key-output { filter: brightness(1.65); }
 
 .chart-tooltip {
