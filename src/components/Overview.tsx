@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, CartesianGrid,
@@ -18,9 +18,30 @@ export default function Overview({
   pricing: PricingTable;
 }) {
   // Time granularity for the trend chart, plus a remembered range per mode.
-  const [gran, setGran] = useState<Granularity>("day");
-  const [dayRange, setDayRange] = useState<RangeKey>("all");
-  const [hourRange, setHourRange] = useState<HourRangeKey>("24h");
+  const [gran, setGran] = useState<Granularity>(() =>
+    localStorage.getItem("overviewGranularity") === "hour" ? "hour" : "day"
+  );
+  const [dayRange, setDayRange] = useState<RangeKey>(() => {
+    const saved = localStorage.getItem("overviewDayRange") as RangeKey | null;
+    return saved && RANGES.some((r) => r.key === saved) ? saved : "all";
+  });
+  const [hourRange, setHourRange] = useState<HourRangeKey>(() => {
+    const saved = localStorage.getItem("overviewHourRange") as HourRangeKey | null;
+    return saved && HOUR_RANGES.some((r) => r.key === saved) ? saved : "24h";
+  });
+
+  useEffect(() => { localStorage.setItem("overviewGranularity", gran); }, [gran]);
+  useEffect(() => { localStorage.setItem("overviewDayRange", dayRange); }, [dayRange]);
+  useEffect(() => { localStorage.setItem("overviewHourRange", hourRange); }, [hourRange]);
+
+  const resetView = () => {
+    localStorage.removeItem("overviewGranularity");
+    localStorage.removeItem("overviewDayRange");
+    localStorage.removeItem("overviewHourRange");
+    setGran("day");
+    setDayRange("all");
+    setHourRange("24h");
+  };
 
   // Recompute the window anchor when the data refreshes (not on every render).
   const now = useMemo(() => Date.now(), [sessions]);
@@ -130,6 +151,7 @@ export default function Overview({
             </button>
           );
         })}
+        <button className="reset-view" type="button" onClick={resetView}>Reset view</button>
       </div>
 
       <div className="cards">

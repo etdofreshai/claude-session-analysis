@@ -8,6 +8,19 @@ type ColKey =
   | "date" | "src" | "host" | "project" | "title" | "models"
   | "prompts" | "tokens" | "subagents" | "duration" | "costWin" | "cost";
 
+const SETTINGS_KEY = "sessionsTableSettings";
+type SavedSettings = {
+  sortKey?: SortKey; desc?: boolean; filter?: string; projectFilter?: string;
+  sourceFilter?: string; hostFilter?: string; windowMs?: number; hidden?: ColKey[];
+};
+
+function loadSettings(): SavedSettings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch { return {}; }
+}
+
 // Columns in table (DOM) order; drives the "Columns" picker and measurement.
 const COLUMNS: { key: ColKey; label: string }[] = [
   { key: "date", label: "Last activity" },
@@ -51,25 +64,43 @@ export default function SessionsTable({
   pricing: PricingTable;
   onSelect: (s: FlatSession) => void;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("date");
-  const [desc, setDesc] = useState(true);
-  const [filter, setFilter] = useState("");
-  const [projectFilter, setProjectFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [hostFilter, setHostFilter] = useState("");
+  const [savedSettings] = useState(loadSettings);
+  const [sortKey, setSortKey] = useState<SortKey>(() =>
+    (["date", "cost", "costWin", "tokens", "prompts", "duration", "subagents"] as SortKey[]).includes(savedSettings.sortKey as SortKey) ? savedSettings.sortKey as SortKey : "date"
+  );
+  const [desc, setDesc] = useState(() => savedSettings.desc ?? true);
+  const [filter, setFilter] = useState(() => savedSettings.filter ?? "");
+  const [projectFilter, setProjectFilter] = useState(() => savedSettings.projectFilter ?? "");
+  const [sourceFilter, setSourceFilter] = useState(() => savedSettings.sourceFilter ?? "");
+  const [hostFilter, setHostFilter] = useState(() => savedSettings.hostFilter ?? "");
   const [windowMs, setWindowMs] = useState<number>(() => {
-    const saved = Number(localStorage.getItem("costWindowMs"));
+    const saved = Number(savedSettings.windowMs ?? localStorage.getItem("costWindowMs"));
     return WINDOW_OPTIONS.some((o) => o.ms === saved) ? saved : 60 * 60_000;
   });
   const windowLabel =
     WINDOW_OPTIONS.find((o) => o.ms === windowMs)?.label ?? "1hr";
 
-  const [hidden, setHidden] = useState<Set<ColKey>>(() => new Set());
+  const [hidden, setHidden] = useState<Set<ColKey>>(() => new Set(savedSettings.hidden ?? []));
   const [pickerOpen, setPickerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const autoFitDone = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      sortKey, desc, filter, projectFilter, sourceFilter, hostFilter, windowMs,
+      hidden: [...hidden],
+    }));
+  }, [sortKey, desc, filter, projectFilter, sourceFilter, hostFilter, windowMs, hidden]);
+
+  const resetView = () => {
+    localStorage.removeItem(SETTINGS_KEY);
+    localStorage.removeItem("costWindowMs");
+    setSortKey("date"); setDesc(true); setFilter(""); setProjectFilter("");
+    setSourceFilter(""); setHostFilter(""); setWindowMs(60 * 60_000); setHidden(new Set());
+    autoFitDone.current = false;
+  };
 
   const visible = (key: ColKey) => !hidden.has(key);
   const toggleColumn = (key: ColKey) =>
@@ -225,6 +256,7 @@ export default function SessionsTable({
           </select>
         </label>
         <span className="muted">{rows.length} sessions</span>
+        <button className="reset-view" type="button" onClick={resetView}>Reset view</button>
         <div className="columns-picker" ref={pickerRef}>
           <button type="button" onClick={() => setPickerOpen((o) => !o)}>
             Columns
