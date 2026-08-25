@@ -11,6 +11,8 @@ import {
 import type { PricingTable } from "../pricing";
 import { fmtTokens, fmtUsd } from "../pricing";
 
+type ModelViewMode = "simple" | "broken-out";
+
 export default function Overview({
   sessions, pricing,
 }: {
@@ -29,18 +31,24 @@ export default function Overview({
     const saved = localStorage.getItem("overviewHourRange") as HourRangeKey | null;
     return saved && HOUR_RANGES.some((r) => r.key === saved) ? saved : "24h";
   });
+  const [modelView, setModelView] = useState<ModelViewMode>(() =>
+    localStorage.getItem("overviewModelView") === "simple" ? "simple" : "broken-out"
+  );
 
   useEffect(() => { localStorage.setItem("overviewGranularity", gran); }, [gran]);
   useEffect(() => { localStorage.setItem("overviewDayRange", dayRange); }, [dayRange]);
   useEffect(() => { localStorage.setItem("overviewHourRange", hourRange); }, [hourRange]);
+  useEffect(() => { localStorage.setItem("overviewModelView", modelView); }, [modelView]);
 
   const resetView = () => {
     localStorage.removeItem("overviewGranularity");
     localStorage.removeItem("overviewDayRange");
     localStorage.removeItem("overviewHourRange");
+    localStorage.removeItem("overviewModelView");
     setGran("day");
     setDayRange("all");
     setHourRange("24h");
+    setModelView("broken-out");
   };
 
   // Recompute the window anchor when the data refreshes (not on every render).
@@ -112,6 +120,11 @@ export default function Overview({
         label: d.label,
         ...Object.fromEntries(
           modelNames.flatMap((m) => [
+            [m, +(
+              (d.byModel[m]?.cache ?? 0) +
+              (d.byModel[m]?.input ?? 0) +
+              (d.byModel[m]?.output ?? 0)
+            ).toFixed(4)],
             [`${m}:cache`, +(d.byModel[m]?.cache ?? 0).toFixed(4)],
             [`${m}:input`, +(d.byModel[m]?.input ?? 0).toFixed(4)],
             [`${m}:output`, +(d.byModel[m]?.output ?? 0).toFixed(4)],
@@ -151,6 +164,24 @@ export default function Overview({
             </button>
           );
         })}
+        <span className="range-sep" />
+        <span className="range-label">Model view</span>
+        <button
+          type="button"
+          className={modelView === "simple" ? "active" : ""}
+          aria-pressed={modelView === "simple"}
+          onClick={() => setModelView("simple")}
+        >
+          Simple
+        </button>
+        <button
+          type="button"
+          className={modelView === "broken-out" ? "active" : ""}
+          aria-pressed={modelView === "broken-out"}
+          onClick={() => setModelView("broken-out")}
+        >
+          Broken out
+        </button>
         <button className="reset-view" type="button" onClick={resetView}>Reset view</button>
       </div>
 
@@ -167,7 +198,7 @@ export default function Overview({
 
       <div className="panel">
         <h2>Estimated cost per {gran === "hour" ? "hour" : "day"} (by model){suffix}</h2>
-        <ShadeLegend />
+        {modelView === "broken-out" && <ShadeLegend />}
         <ResponsiveContainer width="100%" height={gran === "hour" ? 310 : 280}>
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -185,29 +216,33 @@ export default function Overview({
               content={<BucketTooltip />}
               cursor={{ fill: "rgba(255,255,255,0.04)" }}
             />
-            {modelNames.flatMap((m) => [
-              <Bar
-                key={`${m}:cache`}
-                dataKey={`${m}:cache`}
-                name={`${m} · Cached input`}
-                stackId="cost"
-                fill={tokenShade(colorOf[m], "cache")}
-              />,
-              <Bar
-                key={`${m}:input`}
-                dataKey={`${m}:input`}
-                name={`${m} · Input`}
-                stackId="cost"
-                fill={tokenShade(colorOf[m], "input")}
-              />,
-              <Bar
-                key={`${m}:output`}
-                dataKey={`${m}:output`}
-                name={`${m} · Output`}
-                stackId="cost"
-                fill={tokenShade(colorOf[m], "output")}
-              />,
-            ])}
+            {modelView === "simple"
+              ? modelNames.map((m) => (
+                  <Bar key={m} dataKey={m} name={m} stackId="cost" fill={colorOf[m]} />
+                ))
+              : modelNames.flatMap((m) => [
+                  <Bar
+                    key={`${m}:cache`}
+                    dataKey={`${m}:cache`}
+                    name={`${m} · Cached input`}
+                    stackId="cost"
+                    fill={tokenShade(colorOf[m], "cache")}
+                  />,
+                  <Bar
+                    key={`${m}:input`}
+                    dataKey={`${m}:input`}
+                    name={`${m} · Input`}
+                    stackId="cost"
+                    fill={tokenShade(colorOf[m], "input")}
+                  />,
+                  <Bar
+                    key={`${m}:output`}
+                    dataKey={`${m}:output`}
+                    name={`${m} · Output`}
+                    stackId="cost"
+                    fill={tokenShade(colorOf[m], "output")}
+                  />,
+                ])}
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -215,32 +250,49 @@ export default function Overview({
       <div className="panel-row">
         <div className="panel half">
           <h2>Cost by model{suffix}</h2>
-          <ShadeLegend />
+          {modelView === "broken-out" && <ShadeLegend />}
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie
-                data={pieSegments}
-                dataKey="cost"
-                nameKey="key"
-                innerRadius={55}
-                outerRadius={95}
-                paddingAngle={2}
-              >
-                {pieSegments.map((part) => (
-                  <Cell
-                    key={part.key}
-                    fill={tokenShade(
-                      colorOf[part.model],
-                      part.kind === "Cached input" ? "cache" : part.kind.toLowerCase() as "input" | "output"
-                    )}
-                  />
-                ))}
-              </Pie>
+              {modelView === "simple" ? (
+                <Pie
+                  data={pieModels}
+                  dataKey="cost"
+                  nameKey="model"
+                  innerRadius={55}
+                  outerRadius={95}
+                  paddingAngle={2}
+                >
+                  {pieModels.map((model) => (
+                    <Cell key={model.model} fill={colorOf[model.model]} />
+                  ))}
+                </Pie>
+              ) : (
+                <Pie
+                  data={pieSegments}
+                  dataKey="cost"
+                  nameKey="key"
+                  innerRadius={55}
+                  outerRadius={95}
+                  paddingAngle={2}
+                >
+                  {pieSegments.map((part) => (
+                    <Cell
+                      key={part.key}
+                      fill={tokenShade(
+                        colorOf[part.model],
+                        part.kind === "Cached input" ? "cache" : part.kind.toLowerCase() as "input" | "output"
+                      )}
+                    />
+                  ))}
+                </Pie>
+              )}
               <Tooltip
                 contentStyle={{ background: "#1c1f26", border: "1px solid #333" }}
                 formatter={(v: any, _name: any, item: any) => [
                   fmtUsd(Number(v)),
-                  `${item.payload.model} · ${item.payload.kind}`,
+                  item.payload.kind
+                    ? `${item.payload.model} · ${item.payload.kind}`
+                    : item.payload.model,
                 ]}
               />
             </PieChart>
@@ -253,7 +305,15 @@ export default function Overview({
               {models.map((m) => (
                 <tr key={m.model}>
                   <td>
-                    <ModelShadeSwatch color={colorOf[m.model]} />
+                    {modelView === "simple" ? (
+                      <span
+                        className="legend-swatch"
+                        style={{ background: colorOf[m.model] }}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ModelShadeSwatch color={colorOf[m.model]} />
+                    )}
                     {m.model}
                   </td>
                   <td>{m.calls.toLocaleString()}</td>
