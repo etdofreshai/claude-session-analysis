@@ -420,13 +420,39 @@ export const MODEL_COLORS: Record<string, string> = {
   "claude-sonnet-4-5": "#3a8ad4",
   "claude-haiku-4-5": "#4ae8b0",
   "glm-5.1": "#e8d44a",
-  "gpt-5.6-sol": "#ffd166",
   "gpt-5.5": "#5ee84a",
   "<synthetic>": "#777",
 };
 
+/**
+ * Semantic model-family colors. These are checked after exact model entries so
+ * provider-qualified and future versioned variants keep the same visual identity.
+ */
+export const SEMANTIC_MODEL_COLORS = {
+  sol: "#f4a62a",      // warm sunlight / amber
+  luna: "#a9bddb",     // cool moonlight / silver blue
+  terra: "#4f9a6d",    // living earth / forest green
+  ox: "#9b4a3c",       // oxblood / hide brown-red
+  spark: "#f4df32",    // electric spark / lemon yellow
+} as const;
+
 const FALLBACK_COLORS = ["#ff7eb6", "#82cfff", "#ffd166", "#06d6a0", "#b39ddb", "#ef9a9a"];
 
 export function modelColor(model: string, i = 0): string {
-  return MODEL_COLORS[model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length];
+  const exact = MODEL_COLORS[model];
+  if (exact) return exact;
+
+  const normalized = model.toLowerCase();
+  if (normalized === "x-preview-f-free" || normalized.includes("/x-preview-f-free"))
+    return SEMANTIC_MODEL_COLORS.ox;
+  if (/(?:^|[-/])spark(?:$|[-/])/.test(normalized))
+    return SEMANTIC_MODEL_COLORS.spark;
+  if (/(?:^|[-/])sol(?:$|[-/])/.test(normalized))
+    return SEMANTIC_MODEL_COLORS.sol;
+  if (/(?:^|[-/])luna(?:$|[-/])/.test(normalized))
+    return SEMANTIC_MODEL_COLORS.luna;
+  if (/(?:^|[-/])terra(?:$|[-/])/.test(normalized))
+    return SEMANTIC_MODEL_COLORS.terra;
+
+  return FALLBACK_COLORS[i % FALLBACK_COLORS.length];
 }
