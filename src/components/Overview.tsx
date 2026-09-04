@@ -359,7 +359,7 @@ export default function Overview({
 }
 
 // Tooltip for the per-bucket cost chart (daily or hourly). In broken-out mode,
-// collapse the three token-cost series into one stable row per model instead of
+// keep the three token-cost lines together in one stable group per model instead of
 // independently sorting cache/input/output values and scattering a model across
 // the tooltip. Simple mode keeps the compact value-sorted list.
 function BucketTooltip({ active, payload, label }: any) {
@@ -399,32 +399,28 @@ function BucketTooltip({ active, payload, label }: any) {
     return (
       <div className="chart-tooltip chart-tooltip-breakdown">
         <div className="tt-head">{label}</div>
-        <div className="tt-breakdown-row tt-breakdown-header">
-          <span>Model</span>
-          <span>Cached</span>
-          <span>Input</span>
-          <span>Output</span>
-          <span>Total</span>
-        </div>
         {modelRows.map((row) => (
-          <div className="tt-breakdown-row" key={row.model}>
-            <span className="tt-name">
-              <ModelShadeSwatch color={row.color} />
-              {row.model}
-            </span>
-            <span className="tt-val">{value(row.cache)}</span>
-            <span className="tt-val">{value(row.input)}</span>
-            <span className="tt-val">{value(row.output)}</span>
-            <span className="tt-val tt-model-total">
-              {fmtUsd(row.cache + row.input + row.output)}
-            </span>
+          <div className="tt-model-group" key={row.model}>
+            <div className="tt-row tt-model-heading">
+              <span className="tt-name">
+                <ModelShadeSwatch color={row.color} />
+                {row.model}
+              </span>
+              <span className="tt-val">{fmtUsd(row.cache + row.input + row.output)}</span>
+            </div>
+            {(["cache", "input", "output"] as const).map((kind) => (
+              <div className="tt-row tt-token-line" key={kind}>
+                <span className="tt-name">
+                  <span className="legend-swatch" style={{ background: tokenShade(row.color, kind) }} />
+                  {kind === "cache" ? "Cached input" : kind === "input" ? "Input" : "Output"}
+                </span>
+                <span className="tt-val">{value(row[kind])}</span>
+              </div>
+            ))}
           </div>
         ))}
-        <div className="tt-breakdown-row tt-total">
+        <div className="tt-row tt-total">
           <span>All models</span>
-          <span />
-          <span />
-          <span />
           <span className="tt-val">{fmtUsd(total)}</span>
         </div>
       </div>
