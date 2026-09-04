@@ -429,6 +429,7 @@ export const MODEL_COLORS: Record<string, string> = {
  * provider-qualified and future versioned variants keep the same visual identity.
  */
 export const SEMANTIC_MODEL_COLORS = {
+  astra: "#34518b",    // deep orbital blue / starlit space
   sol: "#f4a62a",      // warm sunlight / amber
   luna: "#a9bddb",     // cool moonlight / silver blue
   terra: "#4f9a6d",    // living earth / forest green
@@ -443,6 +444,8 @@ export function modelColor(model: string, i = 0): string {
   if (exact) return exact;
 
   const normalized = model.toLowerCase();
+  if (/(?:^|[-/])astra(?:$|[-/])/.test(normalized))
+    return SEMANTIC_MODEL_COLORS.astra;
   if (normalized === "x-preview-f-free" || normalized.includes("/x-preview-f-free"))
     return SEMANTIC_MODEL_COLORS.ox;
   if (/(?:^|[-/])spark(?:$|[-/])/.test(normalized))

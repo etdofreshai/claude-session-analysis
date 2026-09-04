@@ -27,8 +27,10 @@ export const DEFAULT_PRICING: PricingTable = {
   "claude-sonnet-4": { input: 3, output: 15, cacheRead: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6 },
   "claude-haiku-4": { input: 1, output: 5, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2 },
   "glm-": { input: 0.6, output: 2.2, cacheRead: 0.11, cacheWrite5m: 0, cacheWrite1h: 0 },
-  // Official OpenAI standard API rates (USD / 1M tokens, 2026-08).
-  // Keep these exact: the generic gpt- prefix below is only a legacy fallback.
+  // Official OpenAI Codex / ChatGPT Work rates (USD / 1M tokens).
+  // Astra: 2026-09 rate card. Codex does not charge for cache writes.
+  // Keep exact model rows above the generic gpt- legacy fallback.
+  "gpt-6-astra": { input: 10, output: 50, cacheRead: 1, cacheWrite5m: 0, cacheWrite1h: 0 },
   "gpt-5.6-sol": { input: 5, output: 30, cacheRead: 0.5, cacheWrite5m: 0, cacheWrite1h: 0 },
   "gpt-5.6-terra": { input: 2.5, output: 15, cacheRead: 0.25, cacheWrite5m: 0, cacheWrite1h: 0 },
   "gpt-5.6-luna": { input: 1, output: 6, cacheRead: 0.1, cacheWrite5m: 0, cacheWrite1h: 0 },

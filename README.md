@@ -35,7 +35,8 @@ computes estimates from an editable pricing table (Pricing tab, persisted to
 localStorage). Claude defaults follow the official pricing docs (June 2026):
 Fable/Mythos 5 at $10/$50 per MTok, Opus 4.5–4.8 at $5/$25, deprecated Opus
 4.0/4.1 at $15/$75, Sonnet at $3/$15, Haiku 4.5 at $1/$5. GLM/GPT/Gemini rows
-are approximations. Cache-write pricing distinguishes 5m vs 1h ephemeral
+are approximations except exact named OpenAI rows such as GPT-6 Astra at
+$10 input / $1 cached input / $50 output per MTok. Cache-write pricing distinguishes 5m vs 1h ephemeral
 entries. Caveat: fast mode (premium Opus pricing) is not detected, and
 subscription plans (Pro/Max) don't bill per token — treat costs as
 API-equivalent value, not an invoice.
