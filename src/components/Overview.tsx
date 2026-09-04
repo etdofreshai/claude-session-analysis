@@ -358,12 +358,79 @@ export default function Overview({
   );
 }
 
-// Tooltip for the per-bucket cost chart (daily or hourly). recharts hands us
-// every stacked series (all models) for the hovered bucket; show only the ones
-// that actually cost something, sorted high→low, so the box stays short and
-// relevant instead of listing ~20 models at $0.00.
+// Tooltip for the per-bucket cost chart (daily or hourly). In broken-out mode,
+// collapse the three token-cost series into one stable row per model instead of
+// independently sorting cache/input/output values and scattering a model across
+// the tooltip. Simple mode keeps the compact value-sorted list.
 function BucketTooltip({ active, payload, label }: any) {
   if (!active || !Array.isArray(payload)) return null;
+
+  const grouped = new Map<string, {
+    model: string;
+    cache: number;
+    input: number;
+    output: number;
+    color: string;
+  }>();
+  for (const item of payload) {
+    const match = typeof item?.dataKey === "string"
+      ? item.dataKey.match(/^(.*):(cache|input|output)$/)
+      : null;
+    if (!match) continue;
+    const [, model, kind] = match;
+    const row = grouped.get(model) ?? {
+      model, cache: 0, input: 0, output: 0, color: item.color || item.fill || "#777777",
+    };
+    row[kind as TokenShadeKind] = Number(item.value) || 0;
+    if (kind === "input") row.color = item.color || item.fill || row.color;
+    grouped.set(model, row);
+  }
+
+  if (grouped.size > 0) {
+    const modelRows = [...grouped.values()].filter(
+      (row) => row.cache + row.input + row.output > 0
+    );
+    if (modelRows.length === 0) return null;
+    const total = modelRows.reduce(
+      (sum, row) => sum + row.cache + row.input + row.output,
+      0
+    );
+    const value = (cost: number) => cost > 0 ? fmtUsd(cost) : "—";
+    return (
+      <div className="chart-tooltip chart-tooltip-breakdown">
+        <div className="tt-head">{label}</div>
+        <div className="tt-breakdown-row tt-breakdown-header">
+          <span>Model</span>
+          <span>Cached</span>
+          <span>Input</span>
+          <span>Output</span>
+          <span>Total</span>
+        </div>
+        {modelRows.map((row) => (
+          <div className="tt-breakdown-row" key={row.model}>
+            <span className="tt-name">
+              <ModelShadeSwatch color={row.color} />
+              {row.model}
+            </span>
+            <span className="tt-val">{value(row.cache)}</span>
+            <span className="tt-val">{value(row.input)}</span>
+            <span className="tt-val">{value(row.output)}</span>
+            <span className="tt-val tt-model-total">
+              {fmtUsd(row.cache + row.input + row.output)}
+            </span>
+          </div>
+        ))}
+        <div className="tt-breakdown-row tt-total">
+          <span>All models</span>
+          <span />
+          <span />
+          <span />
+          <span className="tt-val">{fmtUsd(total)}</span>
+        </div>
+      </div>
+    );
+  }
+
   const rows = payload
     .filter((p: any) => (p?.value ?? 0) > 0)
     .sort((a: any, b: any) => b.value - a.value);
